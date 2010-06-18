@@ -1,0 +1,2 @@
+# paths to required packages that are not on the PYTHONPATH
+/Users/rowen/TUIRoot/ROPackage/python
