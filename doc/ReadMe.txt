@@ -26,3 +26,5 @@ Notes:
 - The plug plate ID doesn't not include the measurement number.
 - The files are written using Windows line endings (\r\n), but the data processing code should accept any standard line endings.
 - The data processing software should accept blank lines and comment lines beginning with #
+
+See SDSS technical note 19991012 (which is in generateCMMData/doc) for full instructions for measuring a plug plate.
