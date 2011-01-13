@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 from __future__ import with_statement
-"""Fit plug plate measurements
+"""Fit dipole in plug plate measurements
 
 History:
 2010-06-17 ROwen    2.0: first version using Python instead of Igor
+2011-01-13 ROwen    2.1: Show another digit of radial position error.
+                    Display radial position error as Pos Err instead of Rad Err.
+                    Fit and show dipole moment as additional data.
 """
 import math
 import os.path
@@ -17,7 +20,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import RO.Constants
 import RO.Wdg
 
-__version__ = "2.0"
+__version__ = "2.1"
 
 plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
 measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
@@ -106,7 +109,7 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
         
         self.logWdg = RO.Wdg.LogWdg(
             master = self,
-            width = 102,
+            width = 138,
             height = 50,
         )
         self.logWdg.grid(row=0, column=0, sticky="nsew")
@@ -117,7 +120,7 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
         self.graphTL = RO.Wdg.Toplevel(
             master = self,
             title = "Position Errors",
-            geometry = "+750+50",
+            geometry = "+950+50",
             closeMode = RO.Wdg.tl_CloseDisabled,
         )
         self.graphWdg = GraphWdg(
@@ -146,16 +149,23 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
         scale = 1.0 / math.sqrt(coeffs[2]**2 + coeffs[3]**2)
         rotAngle = math.atan2(coeffs[2], coeffs[3]) * 180.0 / math.pi
         
-        residPosErr = computeFitPos(coeffs, dataArr["measPos"]) - dataArr["nomPos"]
-        radErr = numpy.sqrt(residPosErr[:,0]**2 + residPosErr[:,1]**2)
-        radStats = arrStats(radErr)
+        fitPos = computeFitPos(coeffs, dataArr["measPos"])
+        residPosErr = fitPos - dataArr["nomPos"]
+        residRadPosErr = numpy.sqrt(residPosErr[:,0]**2 + residPosErr[:,1]**2)
     
         diaErr = dataArr["measDia"] - dataArr["nomDia"]
-        diaStats = arrStats(diaErr)
         
-        self.logWdg.addOutput("%-8s  %10s  %5d   %8.3f  %8.3f   %8.6f  %8.3f %8.3f  %8.3f  %8.3f\n" % \
-            (fileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle,
-            radStats["rms"], diaStats["rms"], diaStats["max"]))
+        # handle dipole
+        dipoleCoeffs, nomAng = fitDipole(fitPos, dataArr["nomPos"])
+        dipoleFitPos = computeDipoleFitPos(dipoleCoeffs, fitPos, nomAng)
+        dipoleResidPosErr = dipoleFitPos - dataArr["nomPos"]
+        dipoleMag = dipoleCoeffs[0]
+        dipoleAng = dipoleCoeffs[1] * 180.0 / math.pi
+        
+        self.logWdg.addOutput("%-8s  %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.4f   %8.3f   %8.3f     %8.4f\n" % \
+            (fileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
+            rms(residRadPosErr), rms(diaErr), numpy.max(diaErr), \
+            dipoleMag, dipoleAng, rms(dipoleResidPosErr)))
 
         posErrDType = [
             ("nomPos", float, (2,)),
@@ -169,8 +179,8 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
     
     def processFileList(self, filePathList):
         self.logWdg.addOutput("""
-File       Meas Date  # Holes  Offset X  Offset Y   Scale     Rotation  Rad Err   Dia Err   Dia Err
-                                  mm        mm                  deg     RMS mm    RMS mm    Max mm
+File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   Dia Err   Dia Err  Dipole Mag  Dipole Ang  DPl Pos Err
+                                mm        mm                  deg     RMS mm    RMS mm    Max mm                  deg        RMS mm
 """)
         for filePath in filePathList:
             self.processFile(filePath)
@@ -299,14 +309,41 @@ def computeFitPos(coeffs, measPos):
     - coeffs: coefficients for the model (see below)
     - measPos: array of measured x,y positions
 
-    The model is: fit x  =    c0  +  meas x * (c3  -c2)
-                      y       c1          y   (c2   c3)
+    The model is: fit x  =  c0  +  meas x * (c3  -c2)
+                      y     c1          y   (c2   c3)
     """
     rotMat = numpy.array(((coeffs[3], -coeffs[2]), (coeffs[2], coeffs[3])), dtype=float)
     return coeffs[0:2] + numpy.dot(measPos, rotMat)
 
+def computeDipoleRadSqErr(coeffs, measPos, nomPos, nomAng):
+    """Compute the radial error squared for a particular set of coefficients
+    
+    Inputs:
+    - coeffs: see computeFitPos
+    - measPos: array of measured x,y positions
+    - nomPos: array of nominal x,y positions
+    - nomAng: array of angles to nominal x,y positions = arctan2(nom y, nom x);
+        precomputed to save time
+    """
+    fitPos = computeDipoleFitPos(coeffs, measPos, nomAng)
+    residPosErr = fitPos - nomPos
+    return residPosErr[:,0]**2 + residPosErr[:,1]**2
+
+def computeDipoleFitPos(coeffs, measPos, nomAng):
+    """Compute the fit position for a given set of coefficients
+    
+    Inputs:
+    - coeffs: coefficients for the model (see below)
+    - measPos: array of measured x,y positions
+    - nomAng: array of angles to nominal position
+
+    The model is: fit x  =  meas x * (1 + (c0 * cos(2 * (nom ang - c1))))
+                      y  =  meas y * (1 + (c0 * cos(2 * (nom ang - c1))))
+    """
+    return measPos * (1.0 + (coeffs[0] * numpy.cos(2.0 * (nomAng - coeffs[1]))))[:,numpy.newaxis]
+
 def fitData(measPos, nomPos):
-    """Fit measured data to nominal data
+    """Fit measured data to nominal data using the model described in computeFitPos
     
     Inputs:
     - measPos: array of measured x,y positions
@@ -323,22 +360,31 @@ def fitData(measPos, nomPos):
         raise RuntimeError("fit failed")
     return coeffs
 
-def arrStats(arr):
+def fitDipole(measPos, nomPos):
+    """Fit measured data to nominal data using the model described in computeDipoleFitPos
+    
+    Inputs:
+    - measPos: array of measured x,y positions
+    - nomPos: array of nominal x,y positions
+    
+    Fit the coefficients that minimize radial error squared = (fitX - nomX)**2 + (fitY - nomY)**2
+    where fitX,Y is as computed by computeFitPos
+    
+    Returns:
+    - coeffs
+    - nomAng: array of angle to nominal position (to use in calling computeDipoleFitPos)
     """
-    Return a dictionary containing:
-    - mean: mean of arr
-    - std: standard deviation of arr
-    - rms: rms value of arr
-    - min: min value
-    - max: max value
-    """
-    return dict(
-        mean = numpy.mean(arr),
-        std = numpy.std(arr),
-        rms = numpy.sqrt(numpy.sum(arr**2) / len(arr)),
-        min = numpy.min(arr),
-        max = numpy.max(arr),
-    )
+    initialCoeffs = [0.0, 0.0]
+    nomAng = numpy.arctan2(nomPos[:,1], nomPos[:,0])
+    coeffs, status = scipy.optimize.leastsq(computeDipoleRadSqErr, initialCoeffs, args=(measPos, nomPos, nomAng))
+    if status not in range(5):
+        raise RuntimeError("fit failed")
+    return coeffs, nomAng
+    
+
+def rms(arr):
+    """Return the RMS of an array"""
+    return math.sqrt(numpy.sum(arr**2) / len(arr))
 
 
 if __name__ == "__main__":
