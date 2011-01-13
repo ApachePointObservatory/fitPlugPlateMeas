@@ -112,6 +112,7 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
             width = 138,
             height = 50,
         )
+        self.logWdg.text["font"] = "Courier 12"
         self.logWdg.grid(row=0, column=0, sticky="nsew")
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -156,7 +157,7 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
         diaErr = dataArr["measDia"] - dataArr["nomDia"]
         
         # handle dipole
-        dipoleCoeffs, nomAng = fitDipole(fitPos, dataArr["nomPos"])
+        dipoleCoeffs, nomAng = fitDipole(fitPos, dataArr["nomPos"], doRaise=False)
         dipoleFitPos = computeDipoleFitPos(dipoleCoeffs, fitPos, nomAng)
         dipoleResidPosErr = dipoleFitPos - dataArr["nomPos"]
         dipoleMag = dipoleCoeffs[0]
@@ -180,7 +181,7 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
     def processFileList(self, filePathList):
         self.logWdg.addOutput("""
 File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   Dia Err   Dia Err  Dipole Mag  Dipole Ang  DPl Pos Err
-                                mm        mm                  deg     RMS mm    RMS mm    Max mm                  deg        RMS mm
+                                mm        mm                  deg     RMS mm    RMS mm    Max mm      1e-3        deg        RMS mm
 """)
         for filePath in filePathList:
             self.processFile(filePath)
@@ -337,12 +338,12 @@ def computeDipoleFitPos(coeffs, measPos, nomAng):
     - measPos: array of measured x,y positions
     - nomAng: array of angles to nominal position
 
-    The model is: fit x  =  meas x * (1 + (c0 * cos(2 * (nom ang - c1))))
-                      y  =  meas y * (1 + (c0 * cos(2 * (nom ang - c1))))
+    The model is: fit x  =  meas x * (1 + (c0 * 1e-3 * cos(2 * (nom ang - c1))))
+                      y  =  meas y * (1 + (c0 * 1e-3 * cos(2 * (nom ang - c1))))
     """
-    return measPos * (1.0 + (coeffs[0] * numpy.cos(2.0 * (nomAng - coeffs[1]))))[:,numpy.newaxis]
+    return measPos * (1.0 + (coeffs[0] * 1.0e-3 * numpy.cos(2.0 * (nomAng - coeffs[1]))))[:,numpy.newaxis]
 
-def fitData(measPos, nomPos):
+def fitData(measPos, nomPos, doRaise=False):
     """Fit measured data to nominal data using the model described in computeFitPos
     
     Inputs:
@@ -355,12 +356,20 @@ def fitData(measPos, nomPos):
     Returns coeffs
     """
     initialCoeffs = [0.0, 0.0, 0.0, 1.0]
-    coeffs, status = scipy.optimize.leastsq(computeRadSqErr, initialCoeffs, args=(measPos, nomPos))
+    coeffs, status = scipy.optimize.leastsq(
+        computeRadSqErr,
+        initialCoeffs,
+        args=(measPos, nomPos),
+        maxfev = 5000,
+    )
     if status not in range(5):
-        raise RuntimeError("fit failed")
+        if doRaise:
+            raise RuntimeError("fit failed")
+        else:
+            coeffs[:] = numpy.nan
     return coeffs
 
-def fitDipole(measPos, nomPos):
+def fitDipole(measPos, nomPos, doRaise=False):
     """Fit measured data to nominal data using the model described in computeDipoleFitPos
     
     Inputs:
@@ -376,9 +385,17 @@ def fitDipole(measPos, nomPos):
     """
     initialCoeffs = [0.0, 0.0]
     nomAng = numpy.arctan2(nomPos[:,1], nomPos[:,0])
-    coeffs, status = scipy.optimize.leastsq(computeDipoleRadSqErr, initialCoeffs, args=(measPos, nomPos, nomAng))
+    coeffs, status = scipy.optimize.leastsq(
+        computeDipoleRadSqErr,
+        initialCoeffs,
+        args=(measPos, nomPos, nomAng),
+        maxfev = 5000,
+    )
     if status not in range(5):
-        raise RuntimeError("fit failed")
+        if doRaise:
+            raise RuntimeError("fit failed")
+        else:
+            coeffs[:] = numpy.nan
     return coeffs, nomAng
     
 
