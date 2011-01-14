@@ -46,7 +46,7 @@ class GraphWdg(Tkinter.Frame):
         )
         self.fileMenu.grid(row=0, column=1)
     
-        self.plotFig = matplotlib.figure.Figure(figsize=(7, 12), frameon=True)
+        self.plotFig = matplotlib.figure.Figure(figsize=(19, 8), frameon=True)
         self.figCanvas = FigureCanvasTkAgg(self.plotFig, self)
         figCnvWdg = self.figCanvas.get_tk_widget()
         figCnvWdg.grid(row=1, column=0, columnspan=5, sticky="news")
@@ -61,8 +61,8 @@ class GraphWdg(Tkinter.Frame):
             self.plotFig.delaxes(self.plotAxis)
             self.plotFig.delaxes(self.quadrupolePlotAxis)
         self.plotAxis = self.plotFig.add_subplot(
-            2, 1, 1,
-            title = "Error after removing transation, rotation and scale",
+            1, 2, 1,
+            title = "Residual errors",
             xlabel = "X (mm)",
             ylabel = "Y (mm)",
             autoscale_on = False,
@@ -71,8 +71,8 @@ class GraphWdg(Tkinter.Frame):
             aspect = "equal",
         )
         self.quadrupolePlotAxis = self.plotFig.add_subplot(
-            2, 1, 2,
-            title = "Error after also removing quadrupole",
+            1, 2, 2,
+            title = "Residuals after removing quadrupole",
             xlabel = "X (mm)",
             ylabel = "Y (mm)",
             autoscale_on = False,
@@ -117,7 +117,7 @@ class GraphWdg(Tkinter.Frame):
             width=1,
             angles="xy",
             scale=0.001)
-        self.plotAxis.quiverkey(q, 0.9, 1.02, 0.01, "0.01 mm")
+        self.plotAxis.quiverkey(q, 0.9, 0.92, 0.01, "0.01 mm")
 
         q = self.quadrupolePlotAxis.quiver(
             posErrArr["nomPos"][:,0],
@@ -128,7 +128,7 @@ class GraphWdg(Tkinter.Frame):
             width=1,
             angles="xy",
             scale=0.001)
-        self.quadrupolePlotAxis.quiverkey(q, 0.9, 1.02, 0.01, "0.01 mm")
+        self.quadrupolePlotAxis.quiverkey(q, 0.9, 0.92, 0.01, "0.01 mm")
 
         self.figCanvas.draw()
         
@@ -140,7 +140,7 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
         self.logWdg = RO.Wdg.LogWdg(
             master = self,
             width = 135,
-            height = 50,
+            height = 20,
         )
         self.logWdg.text["font"] = "Courier 12"
         self.logWdg.grid(row=0, column=0, sticky="nsew")
@@ -155,7 +155,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         self.graphTL = RO.Wdg.Toplevel(
             master = self,
             title = "Position Errors",
-            geometry = "+950+50",
+            geometry = "+10+350",
             closeMode = RO.Wdg.tl_CloseDisabled,
         )
         self.graphWdg = GraphWdg(master = self.graphTL)
