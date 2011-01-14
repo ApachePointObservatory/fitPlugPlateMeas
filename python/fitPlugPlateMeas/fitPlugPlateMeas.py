@@ -217,7 +217,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
     
             self.graphWdg.addData(fileName, posErrArr)
         except Exception, e:
-            self.logWdg.addOutput("%s failed: %s" % (fileName, e), severity=RO.Constants.sevError)
+            self.logWdg.addOutput("%s failed: %s\n" % (fileName, e), severity=RO.Constants.sevError)
     
     def processFileList(self, filePathList):
         for filePath in filePathList:
