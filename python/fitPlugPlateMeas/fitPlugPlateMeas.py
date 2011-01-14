@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 from __future__ import with_statement
-"""Fit dipole in plug plate measurements
+"""Fit plug plate measurements
 
 History:
 2010-06-17 ROwen    2.0: first version using Python instead of Igor
 2011-01-13 ROwen    2.1: Show another digit of radial position error.
                     Display radial position error as Pos Err instead of Rad Err.
-                    Fit and show dipole moment as additional data.
+                    Fit and show quadrupole moment as additional data.
+2011-01-14 ROwen    2.2: Graph residuals after removing quadrupole error.
+                    Normalize reported quadrupole magnitude (always positive) and angle (range -180 to 180).
+                    Fixed name dipole -> quadrupole.
+                    Slightly improved quadrupole fitting by using an initial value for quadrupole magnitude.
+                    Improve display of long filenames (which are sometimes used for debugging).
 """
 import math
 import os.path
@@ -20,7 +25,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import RO.Constants
 import RO.Wdg
 
-__version__ = "2.1"
+__version__ = "2.2"
 
 plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
 measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
@@ -41,20 +46,23 @@ class GraphWdg(Tkinter.Frame):
         )
         self.fileMenu.grid(row=0, column=1)
     
-        self.plotFig = matplotlib.figure.Figure(figsize=(7, 6), frameon=True)
+        self.plotFig = matplotlib.figure.Figure(figsize=(7, 12), frameon=True)
         self.figCanvas = FigureCanvasTkAgg(self.plotFig, self)
         figCnvWdg = self.figCanvas.get_tk_widget()
         figCnvWdg.grid(row=1, column=0, columnspan=5, sticky="news")
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(4, weight=1)
         self.plotAxis = None
+        self.quadrupolePlotAxis = None
         self.resetPlotAxis()
 
     def resetPlotAxis(self):
         if self.plotAxis:
             self.plotFig.delaxes(self.plotAxis)
+            self.plotFig.delaxes(self.quadrupolePlotAxis)
         self.plotAxis = self.plotFig.add_subplot(
-            1, 1, 1,
+            2, 1, 1,
+            title = "Error after removing transation, rotation and scale",
             xlabel = "X (mm)",
             ylabel = "Y (mm)",
             autoscale_on = False,
@@ -62,14 +70,24 @@ class GraphWdg(Tkinter.Frame):
             ylim = (-350, 350),
             aspect = "equal",
         )
-    
+        self.quadrupolePlotAxis = self.plotFig.add_subplot(
+            2, 1, 2,
+            title = "Error after also removing quadrupole",
+            xlabel = "X (mm)",
+            ylabel = "Y (mm)",
+            autoscale_on = False,
+            xlim = (-350, 350),
+            ylim = (-350, 350),
+            aspect = "equal",
+        )
+ 
     def addData(self, fileName, posErrArr):
         """Add data to be graphed
         
         Inputs:
         - fileName: name of file containing the data
         - posErrArr: a structured array containing fields:
-            "nomPos" and "residPosErr"
+            "nomPos", "residPosErr" and "quadrupoleResidPosErr"
         """
         self.dataDict[fileName] = posErrArr
         plateIDs = sorted(self.dataDict.keys())
@@ -100,6 +118,18 @@ class GraphWdg(Tkinter.Frame):
             angles="xy",
             scale=0.001)
         self.plotAxis.quiverkey(q, 0.9, 1.02, 0.01, "0.01 mm")
+
+        q = self.quadrupolePlotAxis.quiver(
+            posErrArr["nomPos"][:,0],
+            posErrArr["nomPos"][:,1],
+            posErrArr["quadrupoleResidPosErr"][:,0],
+            posErrArr["quadrupoleResidPosErr"][:,1],
+            units="dots",
+            width=1,
+            angles="xy",
+            scale=0.001)
+        self.quadrupolePlotAxis.quiverkey(q, 0.9, 1.02, 0.01, "0.01 mm")
+
         self.figCanvas.draw()
         
 
@@ -109,7 +139,7 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
         
         self.logWdg = RO.Wdg.LogWdg(
             master = self,
-            width = 138,
+            width = 135,
             height = 50,
         )
         self.logWdg.text["font"] = "Courier 12"
@@ -117,6 +147,10 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.logWdg.addOutput("Plug Plate Fitter %s\n" % (__version__,))
+        self.logWdg.addOutput("""
+File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   Dia Err   Dia Err  QPole Mag  QPole Ang  QP Pos Err
+                                mm        mm                  deg     RMS mm    RMS mm    Max mm      1e-3       deg       RMS mm
+""")
         
         self.graphTL = RO.Wdg.Toplevel(
             master = self,
@@ -124,69 +158,70 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
             geometry = "+950+50",
             closeMode = RO.Wdg.tl_CloseDisabled,
         )
-        self.graphWdg = GraphWdg(
-            master = self.graphTL,
-        )
-        self.graphWdg.pack(side="left", expand=True, fill="both")
+        self.graphWdg = GraphWdg(master = self.graphTL)
+        self.graphWdg.grid(row=0, column=0, sticky="news")
+        self.graphTL.grid_columnconfigure(0, weight=1)
+        self.graphTL.grid_rowconfigure(0, weight=1)
 
         if RO.OS.PlatformName == "mac":
             self.tk.createcommand('::tk::mac::OpenDocument', self._macOpenDocument)
         
         if filePathList:
             self.processFileList(filePathList)
-        else:
-            self.logWdg.addOutput("Drop files on the application icon to process them\n")
     
     def processFile(self, filePath):
-        fileName = os.path.basename(filePath)
+        try:
+            fileName = os.path.basename(filePath)
+            
+            dataArr, plateID, measDate = readFile(filePath)
+            if plateID not in fileName:
+                raise runtimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
+            coeffs = fitData(dataArr["measPos"], dataArr["nomPos"], doRaise=True)
+            # negate the offset and invert the scale to match results from the Igor-based analysis system
+            xyOff = - coeffs[0:2]
+            scale = 1.0 / math.sqrt(coeffs[2]**2 + coeffs[3]**2)
+            rotAngle = math.atan2(coeffs[2], coeffs[3]) * 180.0 / math.pi
+            
+            fitPos = computeFitPos(coeffs, dataArr["measPos"])
+            residPosErr = fitPos - dataArr["nomPos"]
+            residRadPosErr = numpy.sqrt(residPosErr[:,0]**2 + residPosErr[:,1]**2)
         
-        dataArr, plateID, measDate = readFile(filePath)
-        if plateID not in fileName:
-            raise self.logWdg.addOutput("File name = %s does not match plate ID = %s" % (fileName, plateID),
-                severity = RO.Constants.sevError)
-        coeffs = fitData(dataArr["measPos"], dataArr["nomPos"])
-        # negate the offset and invert the scale to match results from the Igor-based analysis system
-        xyOff = - coeffs[0:2]
-        scale = 1.0 / math.sqrt(coeffs[2]**2 + coeffs[3]**2)
-        rotAngle = math.atan2(coeffs[2], coeffs[3]) * 180.0 / math.pi
-        
-        fitPos = computeFitPos(coeffs, dataArr["measPos"])
-        residPosErr = fitPos - dataArr["nomPos"]
-        residRadPosErr = numpy.sqrt(residPosErr[:,0]**2 + residPosErr[:,1]**2)
+            diaErr = dataArr["measDia"] - dataArr["nomDia"]
+            
+            # handle quadrupole (if it cannot be fit then display what we already got)
+            quadrupoleCoeffs, nomAng = fitQuadrupole(fitPos, dataArr["nomPos"], doRaise=False)
+            quadrupoleFitPos = computeQuadrupoleFitPos(quadrupoleCoeffs, fitPos, nomAng)
+            quadrupoleResidPosErr = quadrupoleFitPos - dataArr["nomPos"]
+            quadrupoleMag = quadrupoleCoeffs[0]
+            quadrupoleAng = quadrupoleCoeffs[1] * 180.0 / math.pi
+            
+            if len(fileName) > 9:
+                dispFileName = fileName + "\n         "
+            else:
+                dispFileName = fileName
+            
+            self.logWdg.addOutput("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.4f   %8.4f  %8.2f    %8.4f\n" % \
+                (dispFileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
+                rms(residRadPosErr), rms(diaErr), numpy.max(diaErr), \
+                quadrupoleMag, quadrupoleAng, rms(quadrupoleResidPosErr)))
     
-        diaErr = dataArr["measDia"] - dataArr["nomDia"]
-        
-        # handle dipole
-        dipoleCoeffs, nomAng = fitDipole(fitPos, dataArr["nomPos"], doRaise=False)
-        dipoleFitPos = computeDipoleFitPos(dipoleCoeffs, fitPos, nomAng)
-        dipoleResidPosErr = dipoleFitPos - dataArr["nomPos"]
-        dipoleMag = dipoleCoeffs[0]
-        dipoleAng = dipoleCoeffs[1] * 180.0 / math.pi
-        
-        self.logWdg.addOutput("%-8s  %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.4f   %8.3f   %8.3f     %8.4f\n" % \
-            (fileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
-            rms(residRadPosErr), rms(diaErr), numpy.max(diaErr), \
-            dipoleMag, dipoleAng, rms(dipoleResidPosErr)))
-
-        posErrDType = [
-            ("nomPos", float, (2,)),
-            ("residPosErr", float, (2,)),
-        ]
-        posErrArr = numpy.zeros(dataArr.shape, dtype=posErrDType)
-        posErrArr["nomPos"] = dataArr["nomPos"]
-        posErrArr["residPosErr"] = residPosErr
-
-        self.graphWdg.addData(fileName, posErrArr)
+            posErrDType = [
+                ("nomPos", float, (2,)),
+                ("residPosErr", float, (2,)),
+                ("quadrupoleResidPosErr", float, (2,)),
+            ]
+            posErrArr = numpy.zeros(dataArr.shape, dtype=posErrDType)
+            posErrArr["nomPos"] = dataArr["nomPos"]
+            posErrArr["residPosErr"] = residPosErr
+            posErrArr["quadrupoleResidPosErr"] = quadrupoleResidPosErr
+    
+            self.graphWdg.addData(fileName, posErrArr)
+        except Exception, e:
+            self.logWdg.addOutput("%s failed: %s" % (fileName, e), severity=RO.Constants.sevError)
     
     def processFileList(self, filePathList):
-        self.logWdg.addOutput("""
-File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   Dia Err   Dia Err  Dipole Mag  Dipole Ang  DPl Pos Err
-                                mm        mm                  deg     RMS mm    RMS mm    Max mm      1e-3        deg        RMS mm
-""")
         for filePath in filePathList:
             self.processFile(filePath)
-
-        self.logWdg.addOutput("\nReady for more files\n")
 
     def _macOpenDocument(self, *filePathList):
         """Handle Mac OpenDocument event
@@ -316,7 +351,7 @@ def computeFitPos(coeffs, measPos):
     rotMat = numpy.array(((coeffs[3], -coeffs[2]), (coeffs[2], coeffs[3])), dtype=float)
     return coeffs[0:2] + numpy.dot(measPos, rotMat)
 
-def computeDipoleRadSqErr(coeffs, measPos, nomPos, nomAng):
+def computeQuadrupoleRadSqErr(coeffs, measPos, nomPos, nomAng):
     """Compute the radial error squared for a particular set of coefficients
     
     Inputs:
@@ -326,11 +361,11 @@ def computeDipoleRadSqErr(coeffs, measPos, nomPos, nomAng):
     - nomAng: array of angles to nominal x,y positions = arctan2(nom y, nom x);
         precomputed to save time
     """
-    fitPos = computeDipoleFitPos(coeffs, measPos, nomAng)
+    fitPos = computeQuadrupoleFitPos(coeffs, measPos, nomAng)
     residPosErr = fitPos - nomPos
     return residPosErr[:,0]**2 + residPosErr[:,1]**2
 
-def computeDipoleFitPos(coeffs, measPos, nomAng):
+def computeQuadrupoleFitPos(coeffs, measPos, nomAng):
     """Compute the fit position for a given set of coefficients
     
     Inputs:
@@ -369,8 +404,8 @@ def fitData(measPos, nomPos, doRaise=False):
             coeffs[:] = numpy.nan
     return coeffs
 
-def fitDipole(measPos, nomPos, doRaise=False):
-    """Fit measured data to nominal data using the model described in computeDipoleFitPos
+def fitQuadrupole(measPos, nomPos, doRaise=False):
+    """Fit measured data to nominal data using the model described in computeQuadrupoleFitPos
     
     Inputs:
     - measPos: array of measured x,y positions
@@ -381,12 +416,12 @@ def fitDipole(measPos, nomPos, doRaise=False):
     
     Returns:
     - coeffs
-    - nomAng: array of angle to nominal position (to use in calling computeDipoleFitPos)
+    - nomAng: array of angle to nominal position (to use in calling computeQuadrupoleFitPos)
     """
-    initialCoeffs = [0.0, 0.0]
+    initialCoeffs = [0.01, 0.0]
     nomAng = numpy.arctan2(nomPos[:,1], nomPos[:,0])
     coeffs, status = scipy.optimize.leastsq(
-        computeDipoleRadSqErr,
+        computeQuadrupoleRadSqErr,
         initialCoeffs,
         args=(measPos, nomPos, nomAng),
         maxfev = 5000,
@@ -396,8 +431,22 @@ def fitDipole(measPos, nomPos, doRaise=False):
             raise RuntimeError("fit failed")
         else:
             coeffs[:] = numpy.nan
+
+    # make quadrupole magnitude positive, adjusting angle if necessary
+    if coeffs[0] < 0:
+        coeffs[0] = -coeffs[0]
+        coeffs[1] += math.pi * 0.5
+
+    # normalize angle into range [-pi/2, pi/2] (since it's degenerate to 1/2 rotation)
+    ang = coeffs[1] % (2.0 * math.pi) # in range [0, 2 pi]
+    if ang > math.pi:
+        # remove degeneracy and put in range [0, pi]
+        ang -= math.pi
+    if ang > math.pi * 0.5:
+        # shift range to [-pi/2, pi/2]
+        ang -= math.pi
+    coeffs[1] = ang
     return coeffs, nomAng
-    
 
 def rms(arr):
     """Return the RMS of an array"""
