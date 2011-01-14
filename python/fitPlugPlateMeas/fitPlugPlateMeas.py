@@ -175,7 +175,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
             
             dataArr, plateID, measDate = readFile(filePath)
             if plateID not in fileName:
-                raise runtimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
+                raise RuntimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
             coeffs = fitData(dataArr["measPos"], dataArr["nomPos"], doRaise=True)
             # negate the offset and invert the scale to match results from the Igor-based analysis system
             xyOff = - coeffs[0:2]
