@@ -187,6 +187,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
                 doRaise=True,
             )
             xyOff, rotAngle, scale = fitTransRotScale.model.getTransRotScale()
+            rotAng = -rotAng # to match old the old fitter
             residPosErr = fitTransRotScale.getPosError()
             residRadErr = fitTransRotScale.getRadError()
         
