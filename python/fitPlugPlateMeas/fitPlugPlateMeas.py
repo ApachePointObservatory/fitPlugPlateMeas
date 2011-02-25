@@ -12,6 +12,7 @@ History:
                     Fixed name dipole -> quadrupole.
                     Slightly improved quadrupole fitting by using an initial value for quadrupole magnitude.
                     Improve display of long filenames (which are sometimes used for debugging).
+2011-02-23 ROwen    Moved data fitting to the fitData module.
 """
 import math
 import os.path
@@ -24,8 +25,9 @@ import matplotlib
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import RO.Constants
 import RO.Wdg
+import fitData
 
-__version__ = "2.2"
+__version__ = "2.3"
 
 plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
 measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
@@ -149,7 +151,7 @@ class FitPlugPlateMeasWdg(Tkinter.Frame):
         self.logWdg.addOutput("Plug Plate Fitter %s\n" % (__version__,))
         self.logWdg.addOutput("""
 File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   Dia Err   Dia Err  QPole Mag  QPole Ang  QP Pos Err
-                                mm        mm                  deg     RMS mm    RMS mm    Max mm      1e-3       deg       RMS mm
+                                mm        mm                  deg     RMS mm    RMS mm    Max mm      1e-6       deg       RMS mm
 """)
         
         self.graphTL = RO.Wdg.Toplevel(
@@ -176,34 +178,40 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
             dataArr, plateID, measDate = readFile(filePath)
             if plateID not in fileName:
                 raise RuntimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
-            coeffs = fitData(dataArr["measPos"], dataArr["nomPos"], doRaise=True)
-            # negate the offset and invert the scale to match results from the Igor-based analysis system
-            xyOff = - coeffs[0:2]
-            scale = 1.0 / math.sqrt(coeffs[2]**2 + coeffs[3]**2)
-            rotAngle = math.atan2(coeffs[2], coeffs[3]) * 180.0 / math.pi
-            
-            fitPos = computeFitPos(coeffs, dataArr["measPos"])
-            residPosErr = fitPos - dataArr["nomPos"]
-            residRadPosErr = numpy.sqrt(residPosErr[:,0]**2 + residPosErr[:,1]**2)
+                
+            # fit translation, rotation and scale (if it cannot be fit then we can't use the data)
+            fitTransRotScale = fitData.ModelFit(
+                model = fitData.TransRotScaleModel(),
+                measPos = dataArr["measPos"],
+                nomPos = dataArr["nomPos"],
+                doRaise=True,
+            )
+            xyOff, rotAngle, scale = fitTransRotScale.model.getTransRotScale()
+            residPosErr = fitTransRotScale.getPosError()
+            residRadErr = fitTransRotScale.getRadError()
         
             diaErr = dataArr["measDia"] - dataArr["nomDia"]
             
             # handle quadrupole (if it cannot be fit then display what we already got)
-            quadrupoleCoeffs, nomAng = fitQuadrupole(fitPos, dataArr["nomPos"], doRaise=False)
-            quadrupoleFitPos = computeQuadrupoleFitPos(quadrupoleCoeffs, fitPos, nomAng)
-            quadrupoleResidPosErr = quadrupoleFitPos - dataArr["nomPos"]
-            quadrupoleMag = quadrupoleCoeffs[0]
-            quadrupoleAng = quadrupoleCoeffs[1] * 180.0 / math.pi
+            fitQuadrupole = fitData.ModelFit(
+                model = fitData.QuadrupoleModel([0.01, 0.0]),
+                measPos = dataArr["measPos"],
+                nomPos = fitTransRotScale.getFitPos(),
+                doRaise = False,
+            )
+            quadrupoleMag, quadrupoleAng = fitQuadrupole.model.getMagnitudeAngle()
+            quadrupoleResidPosErr = fitQuadrupole.getPosError()
+            quadrupleResidRadErr = fitQuadrupole.getRadError()
             
             if len(fileName) > 9:
                 dispFileName = fileName + "\n         "
             else:
                 dispFileName = fileName
             
-            self.logWdg.addOutput("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.4f   %8.4f  %8.2f    %8.4f\n" % \
+            self.logWdg.addOutput("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.4f   %8.2f  %8.2f    %8.4f\n" % \
                 (dispFileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
-                rms(residRadPosErr), rms(diaErr), numpy.max(diaErr), \
-                quadrupoleMag, quadrupoleAng, rms(quadrupoleResidPosErr)))
+                fitData.arrayRMS(residRadErr), fitData.arrayRMS(diaErr), numpy.max(diaErr), \
+                quadrupoleMag * 1.0e6, quadrupoleAng, fitData.arrayRMS(quadrupleResidRadErr)))
     
             posErrDType = [
                 ("nomPos", float, (2,)),
@@ -325,132 +333,6 @@ def readFile(filePath):
     outArr["nomDia"] = dataArr["nomDia"]
     outArr["measRoundness"] = dataArr["measRoundness"]
     return outArr, plateID, measDate
-
-def computeRadSqErr(coeffs, measPos, nomPos):
-    """Compute the radial error squared for a particular set of coefficients
-    
-    Inputs:
-    - coeffs: see computeFitPos
-    - measPos: array of measured x,y positions
-    - nomPos: array of nominal x,y positions
-    """
-    fitPos = computeFitPos(coeffs, measPos)
-    residPosErr = fitPos - nomPos
-    return residPosErr[:,0]**2 + residPosErr[:,1]**2
-
-def computeFitPos(coeffs, measPos):
-    """Compute the fit position for a given set of coefficients
-    
-    Inputs:
-    - coeffs: coefficients for the model (see below)
-    - measPos: array of measured x,y positions
-
-    The model is: fit x  =  c0  +  meas x * (c3  -c2)
-                      y     c1          y   (c2   c3)
-    """
-    rotMat = numpy.array(((coeffs[3], -coeffs[2]), (coeffs[2], coeffs[3])), dtype=float)
-    return coeffs[0:2] + numpy.dot(measPos, rotMat)
-
-def computeQuadrupoleRadSqErr(coeffs, measPos, nomPos, nomAng):
-    """Compute the radial error squared for a particular set of coefficients
-    
-    Inputs:
-    - coeffs: see computeFitPos
-    - measPos: array of measured x,y positions
-    - nomPos: array of nominal x,y positions
-    - nomAng: array of angles to nominal x,y positions = arctan2(nom y, nom x);
-        precomputed to save time
-    """
-    fitPos = computeQuadrupoleFitPos(coeffs, measPos, nomAng)
-    residPosErr = fitPos - nomPos
-    return residPosErr[:,0]**2 + residPosErr[:,1]**2
-
-def computeQuadrupoleFitPos(coeffs, measPos, nomAng):
-    """Compute the fit position for a given set of coefficients
-    
-    Inputs:
-    - coeffs: coefficients for the model (see below)
-    - measPos: array of measured x,y positions
-    - nomAng: array of angles to nominal position
-
-    The model is: fit x  =  meas x * (1 + (c0 * 1e-3 * cos(2 * (nom ang - c1))))
-                      y  =  meas y * (1 + (c0 * 1e-3 * cos(2 * (nom ang - c1))))
-    """
-    return measPos * (1.0 + (coeffs[0] * 1.0e-3 * numpy.cos(2.0 * (nomAng - coeffs[1]))))[:,numpy.newaxis]
-
-def fitData(measPos, nomPos, doRaise=False):
-    """Fit measured data to nominal data using the model described in computeFitPos
-    
-    Inputs:
-    - measPos: array of measured x,y positions
-    - nomPos: array of nominal x,y positions
-    
-    Fit the coefficients that minimize radial error squared = (fitX - nomX)**2 + (fitY - nomY)**2
-    where fitX,Y is as computed by computeFitPos
-
-    Returns coeffs
-    """
-    initialCoeffs = [0.0, 0.0, 0.0, 1.0]
-    coeffs, status = scipy.optimize.leastsq(
-        computeRadSqErr,
-        initialCoeffs,
-        args=(measPos, nomPos),
-        maxfev = 5000,
-    )
-    if status not in range(5):
-        if doRaise:
-            raise RuntimeError("fit failed")
-        else:
-            coeffs[:] = numpy.nan
-    return coeffs
-
-def fitQuadrupole(measPos, nomPos, doRaise=False):
-    """Fit measured data to nominal data using the model described in computeQuadrupoleFitPos
-    
-    Inputs:
-    - measPos: array of measured x,y positions
-    - nomPos: array of nominal x,y positions
-    
-    Fit the coefficients that minimize radial error squared = (fitX - nomX)**2 + (fitY - nomY)**2
-    where fitX,Y is as computed by computeFitPos
-    
-    Returns:
-    - coeffs
-    - nomAng: array of angle to nominal position (to use in calling computeQuadrupoleFitPos)
-    """
-    initialCoeffs = [0.01, 0.0]
-    nomAng = numpy.arctan2(nomPos[:,1], nomPos[:,0])
-    coeffs, status = scipy.optimize.leastsq(
-        computeQuadrupoleRadSqErr,
-        initialCoeffs,
-        args=(measPos, nomPos, nomAng),
-        maxfev = 5000,
-    )
-    if status not in range(5):
-        if doRaise:
-            raise RuntimeError("fit failed")
-        else:
-            coeffs[:] = numpy.nan
-
-    # make quadrupole magnitude positive, adjusting angle if necessary
-    if coeffs[0] < 0:
-        coeffs[0] = -coeffs[0]
-        coeffs[1] += math.pi * 0.5
-
-    # normalize angle into range [-pi/2, pi/2] (since it's degenerate to 1/2 rotation)
-    ang = coeffs[1] % (2.0 * math.pi) # in range [0, 2 pi]
-    if ang > math.pi:
-        # remove degeneracy and put in range [0, pi]
-        ang -= math.pi
-    if ang > math.pi * 0.5:
-        # shift range to [-pi/2, pi/2]
-        ang -= math.pi
-    coeffs[1] = ang
-    return coeffs, nomAng
-
-def rms(arr):
-    """Return the RMS of an array"""
-    return math.sqrt(numpy.sum(arr**2) / len(arr))
 
 
 if __name__ == "__main__":
