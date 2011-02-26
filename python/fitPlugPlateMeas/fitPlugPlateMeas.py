@@ -12,25 +12,22 @@ History:
                     Fixed name dipole -> quadrupole.
                     Slightly improved quadrupole fitting by using an initial value for quadrupole magnitude.
                     Improve display of long filenames (which are sometimes used for debugging).
-2011-02-23 ROwen    Moved data fitting to the fitData module.
+2011-02-25 ROwen    Moved data fitting to the fitData module.
+                    Modified to use RO.Wdg.DropletApp.
 """
-import math
 import os.path
 import re
-import sys
 import Tkinter
 import numpy
 import scipy.optimize
 import matplotlib
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import RO.Constants
+import RO.StringUtil
 import RO.Wdg
 import fitData
 
 __version__ = "2.3"
-
-plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
-measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
 
 class GraphWdg(Tkinter.Frame):
     def __init__(self, master):
@@ -135,25 +132,36 @@ class GraphWdg(Tkinter.Frame):
         self.figCanvas.draw()
         
 
-class FitPlugPlateMeasWdg(Tkinter.Frame):
-    def __init__(self, master, filePathList):
-        Tkinter.Frame.__init__(self, master)
+class FitPlugPlateMeasWdg(RO.Wdg.DropletApp):
+    """Fit plug plate CMM measurements
+    
+    Fit out translation, rotation and scale and compute the residual position error to determine
+    if the plate is good enough.
+    Also fit quadrupole to that residual error to look for systematic error in the drilling machine
+    (when this gets bad enough we recalibrate the machine or preprocess the plFanuc files to take it out).
+    Log and graph the results.
+    """
+    def __init__(self, master, filePathList=None):
+        """Construct a FitPlugPlateMeasWdg
         
-        self.logWdg = RO.Wdg.LogWdg(
-            master = self,
+        Inputs:
+        - master: master widget; should be root
+        - filePathList: list of files to process
+        """
+        RO.Wdg.DropletApp.__init__(self,
+            master = master,
             width = 135,
             height = 20,
+            font = "Courier 12", # want a fixed width font
+            printTraceback = True,
         )
-        self.logWdg.text["font"] = "Courier 12"
-        self.logWdg.grid(row=0, column=0, sticky="nsew")
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        self.logWdg.addOutput("Plug Plate Fitter %s\n" % (__version__,))
-        self.logWdg.addOutput("""
+
+        self.logWdg.addOutput("""Plug Plate Fitter %s
+
 File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   Dia Err   Dia Err  QPole Mag  QPole Ang  QP Pos Err
                                 mm        mm                  deg     RMS mm    RMS mm    Max mm      1e-6       deg       RMS mm
-""")
-        
+""" % (__version__,))
+
         self.graphTL = RO.Wdg.Toplevel(
             master = self,
             title = "Position Errors",
@@ -165,77 +173,103 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         self.graphTL.grid_columnconfigure(0, weight=1)
         self.graphTL.grid_rowconfigure(0, weight=1)
 
-        if RO.OS.PlatformName == "mac":
-            self.tk.createcommand('::tk::mac::OpenDocument', self._macOpenDocument)
-        
+        desDType = [
+            ("measPos", float, (2,)),
+            ("fitPos", float, (2,)),
+        ]
+        self.savedDataArr = numpy.zeros(0, dtype=desDType)
+        self.numSavedPlates = 0
+            
         if filePathList:
             self.processFileList(filePathList)
     
-    def processFile(self, filePath):
+    def processFileList(self, filePathList):
+        RO.Wdg.DropletApp.processFileList(self, filePathList)
+
+        if self.numSavedPlates < 1:
+            return
         try:
-            fileName = os.path.basename(filePath)
-            
-            dataArr, plateID, measDate = readFile(filePath)
-            if plateID not in fileName:
-                raise RuntimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
-                
-            # fit translation, rotation and scale (if it cannot be fit then we can't use the data)
-            fitTransRotScale = fitData.ModelFit(
-                model = fitData.TransRotScaleModel(),
-                measPos = dataArr["measPos"],
-                nomPos = dataArr["nomPos"],
-                doRaise=True,
-            )
-            xyOff, rotAngle, scale = fitTransRotScale.model.getTransRotScale()
-            rotAng = -rotAng # to match old the old fitter
-            residPosErr = fitTransRotScale.getPosError()
-            residRadErr = fitTransRotScale.getRadError()
-        
-            diaErr = dataArr["measDia"] - dataArr["nomDia"]
-            
-            # handle quadrupole (if it cannot be fit then display what we already got)
+            # fit quadrupole to saved data and report
             fitQuadrupole = fitData.ModelFit(
                 model = fitData.QuadrupoleModel([0.01, 0.0]),
-                measPos = dataArr["measPos"],
-                nomPos = fitTransRotScale.getFitPos(),
+                measPos = self.savedDataArr["measPos"],
+                nomPos = self.savedDataArr["fitPos"],
                 doRaise = False,
             )
             quadrupoleMag, quadrupoleAng = fitQuadrupole.model.getMagnitudeAngle()
-            quadrupoleResidPosErr = fitQuadrupole.getPosError()
-            quadrupleResidRadErr = fitQuadrupole.getRadError()
-            
-            if len(fileName) > 9:
-                dispFileName = fileName + "\n         "
-            else:
-                dispFileName = fileName
-            
-            self.logWdg.addOutput("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.4f   %8.2f  %8.2f    %8.4f\n" % \
-                (dispFileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
-                fitData.arrayRMS(residRadErr), fitData.arrayRMS(diaErr), numpy.max(diaErr), \
-                quadrupoleMag * 1.0e6, quadrupoleAng, fitData.arrayRMS(quadrupleResidRadErr)))
-    
-            posErrDType = [
-                ("nomPos", float, (2,)),
-                ("residPosErr", float, (2,)),
-                ("quadrupoleResidPosErr", float, (2,)),
-            ]
-            posErrArr = numpy.zeros(dataArr.shape, dtype=posErrDType)
-            posErrArr["nomPos"] = dataArr["nomPos"]
-            posErrArr["residPosErr"] = residPosErr
-            posErrArr["quadrupoleResidPosErr"] = quadrupoleResidPosErr
-    
-            self.graphWdg.addData(fileName, posErrArr)
+            quadrupoleResidRadRMS = fitData.arrayRMS(fitQuadrupole.getRadError())
+                                                                     
+            self.logWdg.addMsg("quadrupole fit for %5d plates: %65s %8.2f  %8.2f    %8.4f" % \
+                (self.numSavedPlates, "", quadrupoleMag * 1.0e6, quadrupoleAng, quadrupoleResidRadRMS))
         except Exception, e:
-            self.logWdg.addOutput("%s failed: %s\n" % (fileName, e), severity=RO.Constants.sevError)
-    
-    def processFileList(self, filePathList):
-        for filePath in filePathList:
-            self.processFile(filePath)
+            self.logWdg.addMsg("Failed to fit quadrupole for cumulative data: %s" % (RO.StringUtil.strFromException(e,)), severity=RO.Constants.sevError)
+            
 
-    def _macOpenDocument(self, *filePathList):
-        """Handle Mac OpenDocument event
+    def processFile(self, filePath):
+        """Process one file of plug plate CMM measurements.
         """
-        self.processFileList(filePathList)
+        fileName = os.path.basename(filePath)
+        
+        dataArr, plateID, measDate = readFile(filePath)
+        if plateID not in fileName:
+            raise RuntimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
+            
+        # fit translation, rotation and scale; raise an exception if fit fails since we can't use the data
+        fitTransRotScale = fitData.ModelFit(
+            model = fitData.TransRotScaleModel(),
+            measPos = dataArr["measPos"],
+            nomPos = dataArr["nomPos"],
+            doRaise=True,
+        )
+        xyOff, rotAngle, scale = fitTransRotScale.model.getTransRotScale()
+        fitPos = fitTransRotScale.getFitPos()
+        residPosErr = fitTransRotScale.getPosError()
+        residRadErr = fitTransRotScale.getRadError()
+    
+        diaErr = dataArr["measDia"] - dataArr["nomDia"]
+
+        newDataToSave = numpy.zeros(dataArr.shape, dtype=self.savedDataArr.dtype)
+        newDataToSave["measPos"] = dataArr["measPos"]
+        newDataToSave["fitPos"] = fitPos
+        self.savedDataArr = numpy.concatenate((self.savedDataArr, newDataToSave))
+        self.numSavedPlates += 1
+        
+        # handle quadrupole (if it cannot be fit then display what we already got)
+        fitQuadrupole = fitData.ModelFit(
+            model = fitData.QuadrupoleModel([0.01, 0.0]),
+            measPos = dataArr["measPos"],
+            nomPos = fitTransRotScale.getFitPos(),
+            doRaise = False,
+        )
+        quadrupoleMag, quadrupoleAng = fitQuadrupole.model.getMagnitudeAngle()
+        quadrupoleResidPosErr = fitQuadrupole.getPosError()
+        quadrupleResidRadErr = fitQuadrupole.getRadError()
+        
+        if len(fileName) > 9:
+            dispFileName = fileName + "\n         "
+        else:
+            dispFileName = fileName
+        
+        self.logWdg.addMsg("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.4f   %8.2f  %8.2f    %8.4f" % \
+            (dispFileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
+            fitData.arrayRMS(residRadErr), fitData.arrayRMS(diaErr), numpy.max(diaErr), \
+            quadrupoleMag * 1.0e6, quadrupoleAng, fitData.arrayRMS(quadrupleResidRadErr)))
+
+        posErrDType = [
+            ("nomPos", float, (2,)),
+            ("residPosErr", float, (2,)),
+            ("quadrupoleResidPosErr", float, (2,)),
+        ]
+        posErrArr = numpy.zeros(dataArr.shape, dtype=posErrDType)
+        posErrArr["nomPos"] = dataArr["nomPos"]
+        posErrArr["residPosErr"] = residPosErr
+        posErrArr["quadrupoleResidPosErr"] = quadrupoleResidPosErr
+
+        self.graphWdg.addData(fileName, posErrArr)
+
+
+plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
+measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
 
 def readHeader(filePath):
     """Read header information from a measurement file
@@ -337,6 +371,7 @@ def readFile(filePath):
 
 
 if __name__ == "__main__":
+    import sys
     filePathList = sys.argv[1:]
     # strip first argument if it starts with "-", as happens when run as a Mac application
     if filePathList and filePathList[0].startswith("-"):
@@ -345,6 +380,6 @@ if __name__ == "__main__":
     root = Tkinter.Tk()
     root.title("FitPlugPlateMeas")
     
-    fitPlugPlateWdg = FitPlugPlateMeasWdg(master = root, filePathList=filePathList)
+    fitPlugPlateWdg = FitPlugPlateMeasWdg(master=root, filePathList=filePathList)
     fitPlugPlateWdg.pack(side="left", expand=True, fill="both")
     root.mainloop()
