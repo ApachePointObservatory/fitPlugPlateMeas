@@ -2,7 +2,9 @@ Fitting plug plate measurements from the UW shop's CMM
 
 Select the CMM measurement results you wish to process and drop them onto the application icon. It will then fit each set of data and display a report. In addition it shows a graph of the residuals (which includes a pop-up menu allowing you to select which plate you wish to display).
 
-Once one batch has been processed you may drop additional measurement files to process more. However, the graph data keeps accumulating until you quite the application and eventually the application will run out of memory.
+Once one batch has been processed you may drop additional measurement files to process more. However, the graph data keeps accumulating until you quit the application and eventually the application will run out of memory.
+
+Note that the reported values include a fit for quadrupole (both plate by plate and cumulatively for all plates processed since you started the program). This has no effect on whether to accept a plate but it helps us keep track of systematic errors in the drilling machine, which we can take out by preprocessing the plFanuc files.
 
 
 
