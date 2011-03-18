@@ -14,12 +14,12 @@ import subprocess
 import sys
 from setuptools import setup
 
-# add various bits to the path
+# add various bits to the path (but preferably use eups instead)
 pkgRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 pythonRoot = os.path.join(pkgRoot, "python", "fitPlugPlateMeas")
+pathList = [pythonRoot]
 if os.path.isfile("extraPaths.txt"):
     with file("extraPaths.txt") as pathFile:
-        pathList = [pythonRoot]
         for pathStr in pathFile:
             pathStr = pathStr.strip()
             if not pathStr or pathStr.startswith("#"):

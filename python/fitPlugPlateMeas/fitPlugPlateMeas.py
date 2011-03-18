@@ -14,6 +14,7 @@ History:
                     Improve display of long filenames (which are sometimes used for debugging).
 2011-02-25 ROwen    Moved data fitting to the fitData module.
                     Modified to use RO.Wdg.DropletApp.
+2011-03-18 ROwen    Save fit data to a file.
 """
 import os.path
 import re
@@ -27,7 +28,7 @@ import RO.StringUtil
 import RO.Wdg
 import fitData
 
-__version__ = "2.3"
+__version__ = "2.4"
 
 class GraphWdg(Tkinter.Frame):
     def __init__(self, master):
@@ -208,7 +209,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
     def processFile(self, filePath):
         """Process one file of plug plate CMM measurements.
         """
-        fileName = os.path.basename(filePath)
+        fileDir, fileName = os.path.split(filePath)
         
         dataArr, plateID, measDate = readFile(filePath)
         if plateID not in fileName:
@@ -250,10 +251,14 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         else:
             dispFileName = fileName
         
-        self.logWdg.addMsg("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.4f   %8.2f  %8.2f    %8.4f" % \
+        residRadErrRMS = fitData.arrayRMS(residRadErr)
+        diaErrRMS = fitData.arrayRMS(diaErr)
+        maxDiaErr = numpy.max(diaErr)
+        quadrupleResidRadErrRMS = fitData.arrayRMS(quadrupleResidRadErr)
+        self.logWdg.addMsg("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.3f   %8.2f  %8.2f    %8.4f" % \
             (dispFileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
-            fitData.arrayRMS(residRadErr), fitData.arrayRMS(diaErr), numpy.max(diaErr), \
-            quadrupoleMag * 1.0e6, quadrupoleAng, fitData.arrayRMS(quadrupleResidRadErr)))
+            residRadErrRMS, diaErrRMS, maxDiaErr, \
+            quadrupoleMag * 1.0e6, quadrupoleAng, quadrupleResidRadErrRMS))
 
         posErrDType = [
             ("nomPos", float, (2,)),
@@ -266,7 +271,35 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         posErrArr["quadrupoleResidPosErr"] = quadrupoleResidPosErr
 
         self.graphWdg.addData(fileName, posErrArr)
-
+        
+        # save fit data to a file
+        inBriefName = fileName
+        if inBriefName.startswith("D"):
+            inBriefName = inBriefName[1:]
+        outName = "fit_%s_%s.txt" % (inBriefName, measDate)
+        outPath = os.path.join(fileDir, outName)
+        with file(outPath, "w") as outFile:
+            outFile.write("PlugPlate %s\nMeasDate %s\n" % (plateID, measDate))
+            outFile.write("# Lengths in mm, angles in deg\n")
+            outFile.write("FitOffset %8.3f %8.3f\nFitScale %8.6f\nFitRotAngle %8.3f\n" % \
+                (xyOff[0], xyOff[1], scale, rotAngle))
+            outFile.write("QPMagnitude %10.8f\nQPAngle %8.2f\n" % (quadrupoleMag, quadrupoleAng))
+            outFile.write("ResidRadErrRMS %10.4f\nDiaErrRMS %8.4f\nMaxDiaErr %8.3f\nQPResidRadErrRMS %8.4f\n" % \
+                (residRadErrRMS, diaErrRMS, maxDiaErr, quadrupleResidRadErrRMS))
+            outFile.write("DataTable\n")
+            outFile.write("    NomX     NomY    MeasX    MeasY   ResidX   ResidY ResidRad   NomDia   DiaErr QPResidX QPResidY QPResidRad\n")
+#                         |        |        |        |        |        |        |        |        |        |        |        |          |
+            for ind, dataRow in enumerate(dataArr):
+                outFile.write("%8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %10.3f\n" % (
+                    dataRow["nomPos"][0],  dataRow["nomPos"][0],
+                    dataRow["measPos"][0], dataRow["measPos"][0], 
+                    residPosErr[ind][0], residPosErr[ind][1],
+                    residRadErr[ind],
+                    dataRow["nomDia"],
+                    diaErr[ind],
+                    quadrupoleResidPosErr[ind][0], quadrupoleResidPosErr[ind][1],
+                    quadrupleResidRadErr[ind],
+                ))
 
 plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
 measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
