@@ -25,8 +25,8 @@ Notes:
 - Units are mm
 - Meas = measured, Nom = nominal, Err = Meas - Nom
 - D is diameter, Round is a measure of roundness
-- The plug plate ID doesn't not include the measurement number.
-- The files are written using Windows line endings (\r\n), but the data processing code should accept any standard line endings.
-- The data processing software should accept blank lines and comment lines beginning with #
+- The plug plate ID does not include the measurement number.
+- The files are written using Windows line endings (\r\n), but the data processing code will accept any standard line endings.
+- The data processing software will accept blank lines and comment lines beginning with #
 
 See SDSS technical note 19991012 (which is in generateCMMData/doc) for full instructions for measuring a plug plate.
