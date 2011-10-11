@@ -15,6 +15,8 @@ History:
 2011-02-25 ROwen    Moved data fitting to the fitData module.
                     Modified to use RO.Wdg.DropletApp.
 2011-03-18 ROwen    Save fit data to a file.
+2011-10-11 ROwen    Renamed to avoid conflicting with package name. Moved __main__ elsewhere.
+                    Modified to only process files whose name matches D[0-9][0-9]*
 """
 import os.path
 import re
@@ -26,9 +28,10 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import RO.Constants
 import RO.StringUtil
 import RO.Wdg
-import fitData
+from . import fitData
+from .version import __version__
 
-__version__ = "2.4"
+__all__ = ["FitPlugPlateMeasWdg"]
 
 class GraphWdg(Tkinter.Frame):
     def __init__(self, master):
@@ -155,6 +158,8 @@ class FitPlugPlateMeasWdg(RO.Wdg.DropletApp):
             height = 20,
             font = "Courier 12", # want a fixed width font
             printTraceback = True,
+            recursionDepth = 1,
+            patterns = "D[0-9][0-9]*",
         )
 
         self.logWdg.addOutput("""Plug Plate Fitter %s
@@ -401,18 +406,3 @@ def readFile(filePath):
     outArr["nomDia"] = dataArr["nomDia"]
     outArr["measRoundness"] = dataArr["measRoundness"]
     return outArr, plateID, measDate
-
-
-if __name__ == "__main__":
-    import sys
-    filePathList = sys.argv[1:]
-    # strip first argument if it starts with "-", as happens when run as a Mac application
-    if filePathList and filePathList[0].startswith("-"):
-        filePathList = filePathList[1:]
-
-    root = Tkinter.Tk()
-    root.title("FitPlugPlateMeas")
-    
-    fitPlugPlateWdg = FitPlugPlateMeasWdg(master=root, filePathList=filePathList)
-    fitPlugPlateWdg.pack(side="left", expand=True, fill="both")
-    root.mainloop()
