@@ -33,7 +33,7 @@ import fitPlugPlateMeas
 
 appName = "FitPlugPlateMeas"
 mainScript = "runFitPlugPlateMeas.py"
-mainProg = os.path.join("bin", mainScript)
+mainProg = os.path.join(pkgRoot, "bin", mainScript)
 appPath = os.path.join("dist", appName + ".app")
 iconFile = "%s.icns" % appName
 versStr = fitPlugPlateMeas.__version__
@@ -46,14 +46,20 @@ plist = dict(
     CFBundleGetInfoString       = "%s %s" % (appName, versStr),
     CFBundleDocumentTypes       = [
         dict(
-            CFBundleTypeName = "TEXT",
+            CFBundleTypeName = "File",
+            CFBundleTypeRole = "Editor",
             LSItemContentTypes = [
                 "public.plain-text",
                 "public.text",
                 "public.data",
-                "com.apple.application-bundle",
             ],
+        ),
+        dict(
+            CFBundleTypeName = "Folder",
             CFBundleTypeRole = "Viewer",
+            LSItemContentTypes = [
+				"public.folder",
+            ],
         ),
     ],
     LSPrefersPPC                = False,
