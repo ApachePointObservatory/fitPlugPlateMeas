@@ -17,6 +17,7 @@ History:
 2011-03-18 ROwen    Save fit data to a file.
 2011-10-11 ROwen    Renamed to avoid conflicting with package name. Moved __main__ elsewhere.
                     Modified to only process files whose name matches D[0-9][0-9]*
+2012-01-30 ROwen    Bug fix: the output file contained had X data instead of Y data for NomY and MeasY.
 """
 import os.path
 import re
@@ -296,8 +297,8 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
 #                         |        |        |        |        |        |        |        |        |        |        |        |          |
             for ind, dataRow in enumerate(dataArr):
                 outFile.write("%8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %10.3f\n" % (
-                    dataRow["nomPos"][0],  dataRow["nomPos"][0],
-                    dataRow["measPos"][0], dataRow["measPos"][0], 
+                    dataRow[ "nomPos"][0], dataRow[ "nomPos"][1],
+                    dataRow["measPos"][0], dataRow["measPos"][1], 
                     residPosErr[ind][0], residPosErr[ind][1],
                     residRadErr[ind],
                     dataRow["nomDia"],
