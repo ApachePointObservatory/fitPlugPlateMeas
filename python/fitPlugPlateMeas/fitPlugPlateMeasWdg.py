@@ -18,6 +18,7 @@ History:
 2011-10-11 ROwen    Renamed to avoid conflicting with package name. Moved __main__ elsewhere.
                     Modified to only process files whose name matches D[0-9][0-9]*
 2012-01-30 ROwen    Bug fix: the output file contained had X data instead of Y data for NomY and MeasY.
+2014-01-16 CCS      Reporting RMS stats for Manga (larger size) holes separately.
 """
 import os.path
 import re
@@ -165,8 +166,8 @@ class FitPlugPlateMeasWdg(RO.Wdg.DropletApp):
 
         self.logWdg.addOutput("""Plug Plate Fitter %s
 
-File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   Dia Err   Dia Err  QPole Mag  QPole Ang  QP Pos Err
-                                mm        mm                  deg     RMS mm    RMS mm    Max mm      1e-6       deg       RMS mm
+File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   Dia Err   Pos Err (M)   Dia Err (M)   Dia Err  QPole Mag  QPole Ang  QP Pos Err
+                                mm        mm                  deg     RMS mm    RMS mm     RMS mm        RMS mm        Max mm      1e-6       deg       RMS mm
 """ % (__version__,))
 
         self.graphTL = RO.Wdg.Toplevel(
@@ -232,8 +233,16 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         fitPos = fitTransRotScale.getFitPos()
         residPosErr = fitTransRotScale.getPosError()
         residRadErr = fitTransRotScale.getRadError()
-    
+
+        # Identify manga holes by their larger diameter.
+        mangaNomDia = 3.28
+        largeDia = dataArr["measDia"] > 3.
+        mangaInds = numpy.flatnonzero(largeDia)
+        nonMangaInds = numpy.flatnonzero(numpy.invert(largeDia))
+        ## ad-hoc adjust nominal diameter for manga holes.
+        dataArr["nomDia"][mangaInds] = mangaNomDia
         diaErr = dataArr["measDia"] - dataArr["nomDia"]
+
 
         newDataToSave = numpy.zeros(dataArr.shape, dtype=self.savedDataArr.dtype)
         newDataToSave["measPos"] = dataArr["measPos"]
@@ -257,13 +266,15 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         else:
             dispFileName = fileName
         
-        residRadErrRMS = fitData.arrayRMS(residRadErr)
-        diaErrRMS = fitData.arrayRMS(diaErr)
+        residRadErrRMS_nonManga = fitData.arrayRMS(residRadErr[nonMangaInds])
+        diaErrRMS_nonManga = fitData.arrayRMS(diaErr[nonMangaInds])
+        residRadErrRMS_manga = fitData.arrayRMS(residRadErr[mangaInds])
+        diaErrRMS_manga = fitData.arrayRMS(diaErr[mangaInds])
         maxDiaErr = numpy.max(diaErr)
         quadrupleResidRadErrRMS = fitData.arrayRMS(quadrupleResidRadErr)
-        self.logWdg.addMsg("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f  %8.3f   %8.2f  %8.2f    %8.4f" % \
+        self.logWdg.addMsg("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f   %8.4f      %8.4f     %8.3f   %8.2f  %8.2f    %8.4f" % \
             (dispFileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
-            residRadErrRMS, diaErrRMS, maxDiaErr, \
+            residRadErrRMS_nonManga, diaErrRMS_nonManga, residRadErrRMS_manga, diaErrRMS_manga, maxDiaErr, \
             quadrupoleMag * 1.0e6, quadrupoleAng, quadrupleResidRadErrRMS))
 
         posErrDType = [
@@ -290,8 +301,8 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
             outFile.write("FitOffset %8.3f %8.3f\nFitScale %8.6f\nFitRotAngle %8.3f\n" % \
                 (xyOff[0], xyOff[1], scale, rotAngle))
             outFile.write("QPMagnitude %10.8f\nQPAngle %8.2f\n" % (quadrupoleMag, quadrupoleAng))
-            outFile.write("ResidRadErrRMS %10.4f\nDiaErrRMS %8.4f\nMaxDiaErr %8.3f\nQPResidRadErrRMS %8.4f\n" % \
-                (residRadErrRMS, diaErrRMS, maxDiaErr, quadrupleResidRadErrRMS))
+            outFile.write("ResidRadErrRMS (MANGA) %10.4f (%10.4f)\nDiaErrRMS (MANGA) %8.4f (%8.4f)\nMaxDiaErr %8.3f\nQPResidRadErrRMS %8.4f\n" % \
+                (residRadErrRMS_nonManga, residRadErrRMS_manga, diaErrRMS_nonManga, diaErrRMS_manga, maxDiaErr, quadrupleResidRadErrRMS))
             outFile.write("DataTable\n")
             outFile.write("    NomX     NomY    MeasX    MeasY   ResidX   ResidY ResidRad   NomDia   DiaErr QPResidX QPResidY QPResidRad\n")
 #                         |        |        |        |        |        |        |        |        |        |        |        |          |
