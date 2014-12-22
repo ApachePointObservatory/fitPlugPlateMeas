@@ -38,11 +38,11 @@ __all__ = ["FitPlugPlateMeasWdg"]
 class GraphWdg(Tkinter.Frame):
     def __init__(self, master):
         Tkinter.Frame.__init__(self, master)
-        
+
         # dictionary of fileName: posErrArr
         self.dataDict = dict()
         self.enablePlotData = True
-        
+
         RO.Wdg.StrLabel(master = self, text="Position Errors for:").grid(row=0, column=0)
         self.fileMenu = RO.Wdg.OptionMenu(
             master = self,
@@ -50,7 +50,7 @@ class GraphWdg(Tkinter.Frame):
             callFunc = self.doPlateMenu,
         )
         self.fileMenu.grid(row=0, column=1)
-    
+
         self.plotFig = matplotlib.figure.Figure(figsize=(19, 8), frameon=True)
         self.figCanvas = FigureCanvasTkAgg(self.plotFig, self)
         figCnvWdg = self.figCanvas.get_tk_widget()
@@ -85,10 +85,10 @@ class GraphWdg(Tkinter.Frame):
             ylim = (-350, 350),
             aspect = "equal",
         )
- 
+
     def addData(self, fileName, posErrArr):
         """Add data to be graphed
-        
+
         Inputs:
         - fileName: name of file containing the data
         - posErrArr: a structured array containing fields:
@@ -136,11 +136,11 @@ class GraphWdg(Tkinter.Frame):
         self.quadrupolePlotAxis.quiverkey(q, 0.9, 0.92, 0.01, "0.01 mm")
 
         self.figCanvas.draw()
-        
+
 
 class FitPlugPlateMeasWdg(RO.Wdg.DropletApp):
     """Fit plug plate CMM measurements
-    
+
     Fit out translation, rotation and scale and compute the residual position error to determine
     if the plate is good enough.
     Also fit quadrupole to that residual error to look for systematic error in the drilling machine
@@ -149,7 +149,7 @@ class FitPlugPlateMeasWdg(RO.Wdg.DropletApp):
     """
     def __init__(self, master, filePathList=None):
         """Construct a FitPlugPlateMeasWdg
-        
+
         Inputs:
         - master: master widget; should be root
         - filePathList: list of files to process
@@ -187,10 +187,10 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         ]
         self.savedDataArr = numpy.zeros(0, dtype=desDType)
         self.numSavedPlates = 0
-            
+
         if filePathList:
             self.processFileList(filePathList)
-    
+
     def processFileList(self, filePathList):
         RO.Wdg.DropletApp.processFileList(self, filePathList)
 
@@ -206,22 +206,22 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
             )
             quadrupoleMag, quadrupoleAng = fitQuadrupole.model.getMagnitudeAngle()
             quadrupoleResidRadRMS = fitData.arrayRMS(fitQuadrupole.getRadError())
-                                                                     
+
             self.logWdg.addMsg("quadrupole fit for %5d plates: %65s %8.2f  %8.2f    %8.4f" % \
                 (self.numSavedPlates, "", quadrupoleMag * 1.0e6, quadrupoleAng, quadrupoleResidRadRMS))
         except Exception, e:
             self.logWdg.addMsg("Failed to fit quadrupole for cumulative data: %s" % (RO.StringUtil.strFromException(e,)), severity=RO.Constants.sevError)
-            
+
 
     def processFile(self, filePath):
         """Process one file of plug plate CMM measurements.
         """
         fileDir, fileName = os.path.split(filePath)
-        
+
         dataArr, plateID, measDate = readFile(filePath)
         if plateID not in fileName:
             raise RuntimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
-            
+
         # fit translation, rotation and scale; raise an exception if fit fails since we can't use the data
         fitTransRotScale = fitData.ModelFit(
             model = fitData.TransRotScaleModel(),
@@ -249,7 +249,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         newDataToSave["fitPos"] = fitPos
         self.savedDataArr = numpy.concatenate((self.savedDataArr, newDataToSave))
         self.numSavedPlates += 1
-        
+
         # handle quadrupole (if it cannot be fit then display what we already got)
         fitQuadrupole = fitData.ModelFit(
             model = fitData.QuadrupoleModel([0.01, 0.0]),
@@ -260,12 +260,12 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         quadrupoleMag, quadrupoleAng = fitQuadrupole.model.getMagnitudeAngle()
         quadrupoleResidPosErr = fitQuadrupole.getPosError()
         quadrupleResidRadErr = fitQuadrupole.getRadError()
-        
+
         if len(fileName) > 9:
             dispFileName = fileName + "\n         "
         else:
             dispFileName = fileName
-        
+
         residRadErrRMS_nonManga = fitData.arrayRMS(residRadErr[nonMangaInds])
         diaErrRMS_nonManga = fitData.arrayRMS(diaErr[nonMangaInds])
         residRadErrRMS_manga = fitData.arrayRMS(residRadErr[mangaInds])
@@ -288,7 +288,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         posErrArr["quadrupoleResidPosErr"] = quadrupoleResidPosErr
 
         self.graphWdg.addData(fileName, posErrArr)
-        
+
         # save fit data to a file
         inBriefName = fileName
         if inBriefName.startswith("D"):
@@ -309,7 +309,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
             for ind, dataRow in enumerate(dataArr):
                 outFile.write("%8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %10.3f\n" % (
                     dataRow[ "nomPos"][0], dataRow[ "nomPos"][1],
-                    dataRow["measPos"][0], dataRow["measPos"][1], 
+                    dataRow["measPos"][0], dataRow["measPos"][1],
                     residPosErr[ind][0], residPosErr[ind][1],
                     residRadErr[ind],
                     dataRow["nomDia"],
@@ -318,7 +318,9 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
                     quadrupleResidRadErr[ind],
                 ))
 
+# match the Plug Plate: plateID
 plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
+# matching Date: YYYY-MM-DD
 measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
 
 def readHeader(filePath):
@@ -331,11 +333,11 @@ def readHeader(filePath):
     - nHeaderLines: number of lines of header
     - plateID (a string)
     - measDate (a string)
-    
+
     The header includes the following (by example), plus possible comments starting with #
     Plug Plate: 2247
     Date: 2005-06-23
-    
+
     Meas X    Meas Y     Nom X     Nom Y     Err X     Err Y  Meas D   Nom D   Round
     """
     plateID = None
@@ -347,7 +349,7 @@ def readHeader(filePath):
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            
+
             plateIDMatch = plateIDRE.match(line)
             if plateIDMatch:
                 plateID = plateIDMatch.group(1)
@@ -357,7 +359,7 @@ def readHeader(filePath):
             if measDateMatch:
                 measDate = measDateMatch.group(1)
                 continue
-                
+
             if line.lower().startswith("meas x"):
                 if None in (plateID, measDate):
                     raise RuntimeError("Could not parse header")
@@ -367,7 +369,7 @@ def readHeader(filePath):
 
 def readFile(filePath):
     """Read a measurement file
-    
+
     Inputs:
     - filePath: path to data file (see format below).
 
@@ -386,7 +388,7 @@ def readFile(filePath):
     Here is an example header:
     Plug Plate: 2247
     Date: 2005-06-23
-    
+
     Meas X    Meas Y     Nom X     Nom Y     Err X     Err Y  Meas D   Nom D   Round
     """
     numHeaderLines, plateID, measDate = readHeader(filePath)
