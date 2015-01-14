@@ -1,0 +1,106 @@
+---------------------------------------------------------------
+Set up:
+---------------------------------------------------------------
+Download and install RO package for python.
+
+download here: https://pypi.python.org/pypi/RO
+
+from command line (you should only have to do this once):
+[%]cd /path/to/downloaded/RO/package
+[%]python setup.py install
+
+From a terminal or shell window, put the fitPlugPlateMeas package on the PYTHONPATH environment variable
+so that python knows where to find these routines.
+
+from command line (you will have to do each time you launch python):
+[%] export PYTHONPATH=/path/to/where/this/code/lives/on/your/computer/fitPlugPlateMeas/python:$PYTHONPATH
+
+---------------------------------------------------------------
+Task list:
+---------------------------------------------------------------
+TASK 1:
+---------
+Create a python class for holding CMM measurements
+
+- class name: PlateMeas in cmmPlateMeas.py
+- Constructed with a "D" file, eg
+>>>plateMeas = PlateMeas("path/to/fitPlugPlateMeas/tests/testData/D1413_1")
+- After construction specific attributes should be available, eg:
+>>>plateMeas.plateID
+>>>plateMeas.date
+
+required attributes (case-sensitive!):
+--------------------------------------
+plateID (integer)
+date (datetime.date object or None if no date exists for this file)
+fitOffset (list of floats, length of 2: [float, float])
+fitScale (float)
+fitRotAngle (float)
+qpMagnitude (float)
+qpAngle (float)
+residRadErrRMS (float)
+mangaResidRadErrRMS (float or None if this is not a MaNGA plate)
+diaErrRMS (float)
+mangaDiaRadErrRMS (float or None if this is not a MaNGA plate)
+maxDiaError (float)
+qpResidRadErrorRMS (float)
+nomX (list of floats)
+nomY (list of floats)
+measX (list of floats)
+measY (list of floats)
+residX (list of floats)
+residY (list of floats)
+residRad (list of floats)
+nomDia (list of floats)
+qpResidX (list of floats)
+qpResidY (list of floats)
+qpResidRad (list of floats)
+------------------------------------
+
+- you can get many attributes directly (for free!) by calling the readFile function in fitPlugPlateMeasWdg.py.  It accepts a filepath to a "D" file and returns a list of 3 things:
+
+(1) dataArray with fields: measPos, nomPos, measDia, nomDia, measRoundness
+
+(2) plateID
+
+(3) measDate, this is a string or None.  If it is not None, it will need to be converted into a datetime.date object.
+
+- All the fitting you will need to do yourself, but you can copy exactly how it is done in the processFile method on the FitPlugPlateMeasWdg in the fitPlugPlateMeasWdg.py file.
+
+These are the relevant variables computed within the method processFile, that you will need to translate into PlateMeas attributes:
+
+residRadErrRMS_nonManga (residRadErrRMS)
+residRadErrRMS_manga (mangaResidRadErrRMS)
+diaErrRMS_nonManga (diaErrRMS)
+diaErrRMS_manga (mangaDiaRadErrRMS)
+maxDiaErr (maxDiaError)
+quadrupleResidRadErrRMS (qpResidRadErrRMS)
+dataRow[ "nomPos"][0] (nomX)
+dataRow[ "nomPos"][1] (nomY)
+dataRow["measPos"][0] (measX)
+dataRow["measPos"][1] (measY)
+residPosErr[ind][0]   (residX)
+residPosErr[ind][1]   (residY)
+residRadErr[ind]      (residRad)
+dataRow["nomDia"]     (nomDia)
+quadrupoleResidPosErr[ind][0] (qpResidX)
+quadrupoleResidPosErr[ind][1] (qpResidY)
+quadrupleResidRadErr[ind] (qpResidRad)
+
+TASK 2:
+---------
+Create a python class for plotting
+
+- class name: MeasPlotter in cmmPlateMeas.py
+- Constructed with a list of PlateMeas objects, eg
+>>>plateMeasList = [PlateMeas("DFile1"), PlateMeas("DFile2"), PlateMeas("DFile3"), ..., PlateMeas("DFileN")]
+>>>measPlotter = MeasPlotter(plateMeasList)
+
+- create a plotting method that will plot resid radial error vs time for all supplied PlateMeas objects...get the date and residRadError from every object and plot it!
+
+- create a file-writting method that will put the x, y values in a file rather than a plot
+
+---------------------------------------------------------------
+Testing:
+---------------------------------------------------------------
+I have created tests, they are found in the /tests directory.  When they work, you know you have done everything correctly!

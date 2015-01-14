@@ -219,6 +219,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
         fileDir, fileName = os.path.split(filePath)
 
         dataArr, plateID, measDate = readFile(filePath)
+        measDate = str(measDate) # meas date may be None
         if plateID not in fileName:
             raise RuntimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
 
@@ -361,8 +362,8 @@ def readHeader(filePath):
                 continue
 
             if line.lower().startswith("meas x"):
-                if None in (plateID, measDate):
-                    raise RuntimeError("Could not parse header")
+                if plateID is None:
+                    raise RuntimeError("Could not parse plateID in header")
                 return (lineNum, plateID, measDate)
 
     raise RuntimeError("Could not parse header")
