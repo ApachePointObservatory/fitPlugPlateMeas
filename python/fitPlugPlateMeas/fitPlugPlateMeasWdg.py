@@ -21,16 +21,17 @@ History:
 2014-01-16 CCS      Reporting RMS stats for Manga (larger size) holes separately.
 """
 import os.path
-import re
+#import re
 import Tkinter
 import numpy
-import scipy.optimize
+#import scipy.optimize
 import matplotlib
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import RO.Constants
 import RO.StringUtil
 import RO.Wdg
 from . import fitData
+from . import PlateMeas
 from .version import __version__
 
 __all__ = ["FitPlugPlateMeasWdg"]
@@ -216,208 +217,112 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
     def processFile(self, filePath):
         """Process one file of plug plate CMM measurements.
         """
-        fileDir, fileName = os.path.split(filePath)
+        plateMeas = PlateMeas(filePath)
+        # fileDir, fileName = os.path.split(filePath)
 
-        dataArr, plateID, measDate = readFile(filePath)
-        measDate = str(measDate) # meas date may be None
-        if plateID not in fileName:
-            raise RuntimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
+        # dataArr, plateID, measDate = readFile(filePath)
+        # measDate = str(measDate) # meas date may be None
+        # if plateID not in fileName:
+        #     raise RuntimeError("File name = %s does not match plate ID = %s" % (fileName, plateID))
 
-        # fit translation, rotation and scale; raise an exception if fit fails since we can't use the data
-        fitTransRotScale = fitData.ModelFit(
-            model = fitData.TransRotScaleModel(),
-            measPos = dataArr["measPos"],
-            nomPos = dataArr["nomPos"],
-            doRaise=True,
-        )
-        xyOff, rotAngle, scale = fitTransRotScale.model.getTransRotScale()
-        fitPos = fitTransRotScale.getFitPos()
-        residPosErr = fitTransRotScale.getPosError()
-        residRadErr = fitTransRotScale.getRadError()
+        # # fit translation, rotation and scale; raise an exception if fit fails since we can't use the data
+        # fitTransRotScale = fitData.ModelFit(
+        #     model = fitData.TransRotScaleModel(),
+        #     measPos = dataArr["measPos"],
+        #     nomPos = dataArr["nomPos"],
+        #     doRaise=True,
+        # )
+        # xyOff, rotAngle, scale = fitTransRotScale.model.getTransRotScale()
+        # fitPos = fitTransRotScale.getFitPos()
+        # residPosErr = fitTransRotScale.getPosError()
+        # residRadErr = fitTransRotScale.getRadError()
 
-        # Identify manga holes by their larger diameter.
-        mangaNomDia = 3.28
-        largeDia = dataArr["measDia"] > 3.
-        mangaInds = numpy.flatnonzero(largeDia)
-        nonMangaInds = numpy.flatnonzero(numpy.invert(largeDia))
-        ## ad-hoc adjust nominal diameter for manga holes.
-        dataArr["nomDia"][mangaInds] = mangaNomDia
-        diaErr = dataArr["measDia"] - dataArr["nomDia"]
+        # # Identify manga holes by their larger diameter.
+        # mangaNomDia = 3.28
+        # largeDia = dataArr["measDia"] > 3.
+        # mangaInds = numpy.flatnonzero(largeDia)
+        # nonMangaInds = numpy.flatnonzero(numpy.invert(largeDia))
+        # ## ad-hoc adjust nominal diameter for manga holes.
+        # dataArr["nomDia"][mangaInds] = mangaNomDia
+        # diaErr = dataArr["measDia"] - dataArr["nomDia"]
 
 
-        newDataToSave = numpy.zeros(dataArr.shape, dtype=self.savedDataArr.dtype)
-        newDataToSave["measPos"] = dataArr["measPos"]
-        newDataToSave["fitPos"] = fitPos
-        self.savedDataArr = numpy.concatenate((self.savedDataArr, newDataToSave))
-        self.numSavedPlates += 1
+        # newDataToSave = numpy.zeros(dataArr.shape, dtype=self.savedDataArr.dtype)
+        # newDataToSave["measPos"] = dataArr["measPos"]
+        # newDataToSave["fitPos"] = fitPos
+        # self.savedDataArr = numpy.concatenate((self.savedDataArr, newDataToSave))
+        # self.numSavedPlates += 1
 
-        # handle quadrupole (if it cannot be fit then display what we already got)
-        fitQuadrupole = fitData.ModelFit(
-            model = fitData.QuadrupoleModel([0.01, 0.0]),
-            measPos = dataArr["measPos"],
-            nomPos = fitTransRotScale.getFitPos(),
-            doRaise = False,
-        )
-        quadrupoleMag, quadrupoleAng = fitQuadrupole.model.getMagnitudeAngle()
-        quadrupoleResidPosErr = fitQuadrupole.getPosError()
-        quadrupleResidRadErr = fitQuadrupole.getRadError()
+        # # handle quadrupole (if it cannot be fit then display what we already got)
+        # fitQuadrupole = fitData.ModelFit(
+        #     model = fitData.QuadrupoleModel([0.01, 0.0]),
+        #     measPos = dataArr["measPos"],
+        #     nomPos = fitTransRotScale.getFitPos(),
+        #     doRaise = False,
+        # )
+        # quadrupoleMag, quadrupoleAng = fitQuadrupole.model.getMagnitudeAngle()
+        # quadrupoleResidPosErr = fitQuadrupole.getPosError()
+        # quadrupleResidRadErr = fitQuadrupole.getRadError()
 
-        if len(fileName) > 9:
-            dispFileName = fileName + "\n         "
+        if len(plateMeas.fileName) > 9:
+            dispFileName = plateMeas.fileName + "\n         "
         else:
-            dispFileName = fileName
+            dispFileName = plateMeas.fileName
 
-        residRadErrRMS_nonManga = fitData.arrayRMS(residRadErr[nonMangaInds])
-        diaErrRMS_nonManga = fitData.arrayRMS(diaErr[nonMangaInds])
-        residRadErrRMS_manga = fitData.arrayRMS(residRadErr[mangaInds])
-        diaErrRMS_manga = fitData.arrayRMS(diaErr[mangaInds])
-        maxDiaErr = numpy.max(diaErr)
-        quadrupleResidRadErrRMS = fitData.arrayRMS(quadrupleResidRadErr)
+        # residRadErrRMS_nonManga = fitData.arrayRMS(residRadErr[nonMangaInds])
+        # diaErrRMS_nonManga = fitData.arrayRMS(diaErr[nonMangaInds])
+        # residRadErrRMS_manga = fitData.arrayRMS(residRadErr[mangaInds])
+        # diaErrRMS_manga = fitData.arrayRMS(diaErr[mangaInds])
+        # maxDiaErr = numpy.max(diaErr)
+        # quadrupleResidRadErrRMS = fitData.arrayRMS(quadrupleResidRadErr)
         self.logWdg.addMsg("%-9s %10s %5d  %8.3f  %8.3f   %8.6f  %8.3f %8.4f  %8.4f   %8.4f      %8.4f     %8.3f   %8.2f  %8.2f    %8.4f" % \
-            (dispFileName, measDate, len(dataArr), xyOff[0], xyOff[1], scale, rotAngle, \
-            residRadErrRMS_nonManga, diaErrRMS_nonManga, residRadErrRMS_manga, diaErrRMS_manga, maxDiaErr, \
-            quadrupoleMag * 1.0e6, quadrupoleAng, quadrupleResidRadErrRMS))
+            (dispFileName, plateMeas.measDate, len(plateMeas.dataArr), plateMeas.xyOff[0], plateMeas.xyOff[1], plateMeas.scale, plateMeas.rotAngle, \
+            plateMeas.residRadErrRMS_nonManga, plateMeas.diaErrRMS_nonManga, plateMeas.residRadErrRMS_manga, plateMeas.diaErrRMS_manga, plateMeas.maxDiaErr, \
+            plateMeas.quadrupoleMag * 1.0e6, plateMeas.quadrupoleAng, plateMeas.quadrupleResidRadErrRMS))
 
-        posErrDType = [
-            ("nomPos", float, (2,)),
-            ("residPosErr", float, (2,)),
-            ("quadrupoleResidPosErr", float, (2,)),
-        ]
-        posErrArr = numpy.zeros(dataArr.shape, dtype=posErrDType)
-        posErrArr["nomPos"] = dataArr["nomPos"]
-        posErrArr["residPosErr"] = residPosErr
-        posErrArr["quadrupoleResidPosErr"] = quadrupoleResidPosErr
+        # posErrDType = [
+        #     ("nomPos", float, (2,)),
+        #     ("residPosErr", float, (2,)),
+        #     ("quadrupoleResidPosErr", float, (2,)),
+        # ]
+        # posErrArr = numpy.zeros(dataArr.shape, dtype=posErrDType)
+        # posErrArr["nomPos"] = dataArr["nomPos"]
+        # posErrArr["residPosErr"] = residPosErr
+        # posErrArr["quadrupoleResidPosErr"] = quadrupoleResidPosErr
 
-        self.graphWdg.addData(fileName, posErrArr)
+        self.graphWdg.addData(plateMeas.fileName, plateMeas.posErrArr)
 
         # save fit data to a file
-        inBriefName = fileName
+        inBriefName = plateMeas.fileName
         if inBriefName.startswith("D"):
             inBriefName = inBriefName[1:]
-        outName = "fit_%s_%s.txt" % (inBriefName, measDate)
-        outPath = os.path.join(fileDir, outName)
+        outName = "fit_%s_%s.txt" % (inBriefName, plateMeas.measDate)
+        outPath = os.path.join(plateMeas.fileDir, outName)
         with file(outPath, "w") as outFile:
-            outFile.write("PlugPlate %s\nMeasDate %s\n" % (plateID, measDate))
+            outFile.write("PlugPlate %s\nMeasDate %s\n" % (plateMeas.plateID, plateMeas.measDate))
             outFile.write("# Lengths in mm, angles in deg\n")
             outFile.write("FitOffset %8.3f %8.3f\nFitScale %8.6f\nFitRotAngle %8.3f\n" % \
-                (xyOff[0], xyOff[1], scale, rotAngle))
-            outFile.write("QPMagnitude %10.8f\nQPAngle %8.2f\n" % (quadrupoleMag, quadrupoleAng))
+                (plateMeas.xyOff[0], plateMeas.xyOff[1], plateMeas.scale, plateMeas.rotAngle))
+            outFile.write("QPMagnitude %10.8f\nQPAngle %8.2f\n" % (plateMeas.quadrupoleMag, plateMeas.quadrupoleAng))
             outFile.write("ResidRadErrRMS (MANGA) %10.4f (%10.4f)\nDiaErrRMS (MANGA) %8.4f (%8.4f)\nMaxDiaErr %8.3f\nQPResidRadErrRMS %8.4f\n" % \
-                (residRadErrRMS_nonManga, residRadErrRMS_manga, diaErrRMS_nonManga, diaErrRMS_manga, maxDiaErr, quadrupleResidRadErrRMS))
+                (plateMeas.residRadErrRMS_nonManga, plateMeas.residRadErrRMS_manga, plateMeas.diaErrRMS_nonManga, plateMeas.diaErrRMS_manga, plateMeas.maxDiaErr, plateMeas.quadrupleResidRadErrRMS))
             outFile.write("DataTable\n")
             outFile.write("    NomX     NomY    MeasX    MeasY   ResidX   ResidY ResidRad   NomDia   DiaErr QPResidX QPResidY QPResidRad\n")
 #                         |        |        |        |        |        |        |        |        |        |        |        |          |
-            for ind, dataRow in enumerate(dataArr):
+            for ind, dataRow in enumerate(plateMeas.dataArr):
                 outFile.write("%8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %10.3f\n" % (
                     dataRow[ "nomPos"][0], dataRow[ "nomPos"][1],
                     dataRow["measPos"][0], dataRow["measPos"][1],
-                    residPosErr[ind][0], residPosErr[ind][1],
-                    residRadErr[ind],
+                    plateMeas.residPosErr[ind][0], plateMeas.residPosErr[ind][1],
+                    plateMeas.residRadErr[ind],
                     dataRow["nomDia"],
-                    diaErr[ind],
-                    quadrupoleResidPosErr[ind][0], quadrupoleResidPosErr[ind][1],
-                    quadrupleResidRadErr[ind],
+                    plateMeas.diaErr[ind],
+                    plateMeas.quadrupoleResidPosErr[ind][0], plateMeas.quadrupoleResidPosErr[ind][1],
+                    plateMeas.quadrupleResidRadErr[ind],
                 ))
 
-# match the Plug Plate: plateID
-plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
-# matching Date: YYYY-MM-DD
-measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
+# # match the Plug Plate: plateID
+# plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE)
+# # matching Date: YYYY-MM-DD
+# measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
 
-def readHeader(filePath):
-    """Read header information from a measurement file
-
-    Inputs:
-    - filePath: path to data file (see format below).
-
-    Return:
-    - nHeaderLines: number of lines of header
-    - plateID (a string)
-    - measDate (a string)
-
-    The header includes the following (by example), plus possible comments starting with #
-    Plug Plate: 2247
-    Date: 2005-06-23
-
-    Meas X    Meas Y     Nom X     Nom Y     Err X     Err Y  Meas D   Nom D   Round
-    """
-    plateID = None
-    measDate = None
-    lineNum = 0
-    with file(filePath, "rU") as dataFile:
-        for line in dataFile:
-            lineNum += 1
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-
-            plateIDMatch = plateIDRE.match(line)
-            if plateIDMatch:
-                plateID = plateIDMatch.group(1)
-                continue
-
-            measDateMatch = measDateRE.match(line)
-            if measDateMatch:
-                measDate = measDateMatch.group(1)
-                continue
-
-            if line.lower().startswith("meas x"):
-                if plateID is None:
-                    raise RuntimeError("Could not parse plateID in header")
-                return (lineNum, plateID, measDate)
-
-    raise RuntimeError("Could not parse header")
-
-def readFile(filePath):
-    """Read a measurement file
-
-    Inputs:
-    - filePath: path to data file (see format below).
-
-    Returns:
-    - dataArr: a structured array with fields:
-        - measPos (x,y)
-        - nomPos (x,y)
-        - measDia
-        - nomDia
-        - measRoundness
-    - plateID
-    - measDate
-
-    The file format is 4 lines of header followed by space-separated floating-point data.
-    The measurements are in mm.
-    Here is an example header:
-    Plug Plate: 2247
-    Date: 2005-06-23
-
-    Meas X    Meas Y     Nom X     Nom Y     Err X     Err Y  Meas D   Nom D   Round
-    """
-    numHeaderLines, plateID, measDate = readHeader(filePath)
-    inDtype = [
-        ("measPosX", float),
-        ("measPosY", float),
-        ("nomPosX", float),
-        ("nomPosY", float),
-        ("posErrX", float),
-        ("posErrY", float),
-        ("measDia", float),
-        ("nomDia", float),
-        ("measRoundness", float),
-    ]
-    dataArr = numpy.loadtxt(filePath, dtype=inDtype, skiprows=numHeaderLines)
-    desDType = [
-        ("measPos", float, (2,)),
-        ("nomPos", float, (2,)),
-        ("measDia", float),
-        ("nomDia", float),
-        ("measRoundness", float),
-    ]
-    outArr = numpy.zeros(dataArr.shape, dtype=desDType)
-    outArr["measPos"][:,0] = dataArr["measPosX"]
-    outArr["measPos"][:,1] = dataArr["measPosY"]
-    outArr["nomPos"][:,0] = dataArr["nomPosX"]
-    outArr["nomPos"][:,1] = dataArr["nomPosY"]
-    outArr["measDia"] = dataArr["measDia"]
-    outArr["nomDia"] = dataArr["nomDia"]
-    outArr["measRoundness"] = dataArr["measRoundness"]
-    return outArr, plateID, measDate
