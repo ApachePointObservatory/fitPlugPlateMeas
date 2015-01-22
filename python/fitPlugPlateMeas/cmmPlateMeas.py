@@ -9,6 +9,8 @@ plateIDRE = re.compile(r"^Plug Plate: ([0-9a-zA-Z_]+) *(?:#.*)?$", re.IGNORECASE
 # matching Date: YYYY-MM-DD
 measDateRE = re.compile(r"^Date: ([0-9-]+) *(?:#.*)?$", re.IGNORECASE)
 
+__all__ = ["PlateMeas"]
+
 class PlateMeas(object):
     def __init__(self, pathToFile):
         """inputs:

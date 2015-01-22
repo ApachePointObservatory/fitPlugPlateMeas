@@ -31,7 +31,7 @@ import RO.Constants
 import RO.StringUtil
 import RO.Wdg
 from . import fitData
-from . import PlateMeas
+from .cmmPlateMeas import PlateMeas
 from .version import __version__
 
 __all__ = ["FitPlugPlateMeasWdg"]
