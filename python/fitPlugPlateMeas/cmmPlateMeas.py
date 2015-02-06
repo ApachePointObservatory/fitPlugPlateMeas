@@ -16,15 +16,33 @@ class PlateMeas(object):
         """inputs:
         pathToFile: path to a "D" file (output by the cmm measurement routine)
         """
+        desDType = [
+            ("measPos", float, (2,)),
+            ("fitPos", float, (2,)),
+        ]
+        self.savedDataArr = numpy.zeros(0, dtype=desDType)
+
         self.processFile(pathToFile)
 
     def processFile(self, filePath):
         fileDir, fileName = os.path.split(filePath)
         self.fileDir = fileDir
         self.fileName = fileName
-        self.dataArr, self.plateID, measDate = readFile(filePath)
+        self.dataArr, plateID, measDate = readFile(filePath)
+        try:
+            self.plateID = int(plateID)
+        except ValueError:
+            # must be string or something in it
+            plateIDint=""
+            for char in plateID:
+                try:
+                    int(char)
+                    plateIDint += char
+                except:
+                    break
+            self.plateID = int(plateIDint)
         self.measDate = str(measDate) # meas date may be None
-        if self.plateID not in self.fileName:
+        if plateID not in self.fileName:
             raise RuntimeError("File name = %s does not match plate ID = %s" % (self.fileName, self.plateID))
 
         # fit translation, rotation and scale; raise an exception if fit fails since we can't use the data
@@ -49,11 +67,11 @@ class PlateMeas(object):
         diaErr = self.dataArr["measDia"] - self.dataArr["nomDia"]
 
 
-        newDataToSave = numpy.zeros(self.dataArr.shape, dtype=self.savedself.DataArr.dtype)
+        newDataToSave = numpy.zeros(self.dataArr.shape, dtype=self.savedDataArr.dtype)
         newDataToSave["measPos"] = self.dataArr["measPos"]
         newDataToSave["fitPos"] = fitPos
         self.savedDataArr = numpy.concatenate((self.savedDataArr, newDataToSave))
-        self.numSavedPlates += 1
+        # self.numSavedPlates += 1
 
         # handle quadrupole (if it cannot be fit then display what we already got)
         fitQuadrupole = fitData.ModelFit(
@@ -82,6 +100,41 @@ class PlateMeas(object):
         self.posErrArr["nomPos"] = self.dataArr["nomPos"]
         self.posErrArr["residPosErr"] = residPosErr
         self.posErrArr["quadrupoleResidPosErr"] = quadrupoleResidPosErr
+
+    def export(self):
+        xPos = []
+        yPos = []
+        xErr = []
+        yErr = []
+        radErr = []
+        for meas in self.posErrArr:
+            xPos.append(meas[0][0])
+            yPos.append(meas[0][1])
+            xErr.append(meas[1][0])
+            yErr.append(meas[1][1])
+            radErr.append((meas[1][0]**2+meas[1][1]**2)**0.5)
+        return {
+            "fileName": self.fileName,
+            "plateID": self.plateID,
+            "measDate": self.measDate,
+            "xyOff": self.xyOff,
+            "rotAngle": self.rotAngle,
+            "scale": self.scale,
+            "quadrupoleMag": self.quadrupoleMag,
+            "quadrupoleAngle": self.quadrupoleAng,
+            "residRadErrRMS_nonManga": self.residRadErrRMS_nonManga,
+            "diaErrRMS_nonManga": self.diaErrRMS_nonManga,
+            "residRadErrRMS_manga": self.residRadErrRMS_manga,
+            "diaErrRMS_manga": self.diaErrRMS_manga,
+            "maxDiaErr": self.maxDiaErr,
+            "quadrupleResidRadErrRMS": self.quadrupleResidRadErrRMS,
+            "xPos": xPos,
+            "yPos": yPos,
+            "xErr": xErr,
+            "yErr": yErr,
+            "radErr": radErr,
+        }
+
 
 class MeasPlotter(object):
     def __init__(self, plateMeasList):
