@@ -85,9 +85,11 @@ class PlateMeas(object):
         quadrupleResidRadErr = fitQuadrupole.getRadError()
 
         self.residRadErrRMS_nonManga = fitData.arrayRMS(residRadErr[nonMangaInds])
-        self.diaErrRMS_nonManga = fitData.arrayRMS(diaErr[nonMangaInds])
+        self.diaErr_nonManga = diaErr[nonMangaInds]
+        self.diaErrRMS_nonManga = fitData.arrayRMS(self.diaErr_nonManga)
+        self.diaErr_manga = diaErr[mangaInds]
         self.residRadErrRMS_manga = fitData.arrayRMS(residRadErr[mangaInds])
-        self.diaErrRMS_manga = fitData.arrayRMS(diaErr[mangaInds])
+        self.diaErrRMS_manga = fitData.arrayRMS(self.diaErr_manga)
         self.maxDiaErr = numpy.max(diaErr)
         self.quadrupleResidRadErrRMS = fitData.arrayRMS(quadrupleResidRadErr)
 
@@ -122,8 +124,9 @@ class PlateMeas(object):
             "scale": self.scale,
             "quadrupoleMag": self.quadrupoleMag,
             "quadrupoleAngle": self.quadrupoleAng,
-            "residRadErrRMS_nonManga": self.residRadErrRMS_nonManga,
-            "diaErrRMS_nonManga": self.diaErrRMS_nonManga,
+            "residRadErrRMS": self.residRadErrRMS_nonManga,
+            "diaErr": self.diaErr_nonManga,
+            "diaErrRMS": self.diaErrRMS_nonManga,
             "residRadErrRMS_manga": self.residRadErrRMS_manga,
             "diaErrRMS_manga": self.diaErrRMS_manga,
             "maxDiaErr": self.maxDiaErr,
