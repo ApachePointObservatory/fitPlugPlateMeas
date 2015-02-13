@@ -21,7 +21,10 @@ def recursiveDive(plateList, path):
     dFiles = glob.glob(os.path.join(path, "D*"))
     for f in dFiles[1:]:
         try:
-            plateList.append(PlateMeas(f).export())
+            plate = PlateMeas(f).export()
+            if not plate["measDate"]:
+                continue
+            plateList.append(plate)
         except Exception:
             pass
             # print("Exceptoin!: %s"%str(e))
