@@ -126,11 +126,29 @@ class PlotManager(object):
         # ax.set_aspect("equal")
         plt.savefig(self.figDir+"/"+plotName+"."+self.figFormat, format=self.figFormat)
 
-    def fullErrorHist(self, plotName, diaHists, radHists):
+    def fullErrorHist(self, diaHists, radHists):
         fiberOD = 0.190 # perfect
         nomHoleDia = 2.167
         nSamples = 100000
-        plt.figure()
+        xlim=(0, .05)
+        bins=numpy.linspace(xlim[0],xlim[1],60)
+        f, axes = plt.subplots(6, 1, figsize=(10,10))
+        ferruleConcErr = [sampleFerruleConc(nSamples), sampleRandomAngle(nSamples)]
+        # ferrulePosErr = [[0]*nSamples, sampleRandomAngle(nSamples)]
+        # fiber errors
+        fiberPosErr = [
+            (sampleFerruleID(nSamples)-fiberOD)/2.,
+            sampleRandomAngle(nSamples)
+        ]
+        fiberConcErr = [sampleFiberConc(nSamples), sampleRandomAngle(nSamples)]
+        titles = ["Core to Cladding Concentricity", "Cladding to Ferrule Clearance", "Ferrule OD-ID Concentricity"]
+        fullRadialErrors = []
+        for ind, err in enumerate([fiberConcErr, fiberPosErr, ferruleConcErr]):
+            axes[ind].hist(err[0], bins=bins, normed=True)
+            axes[ind].set_xlim(xlim)
+            axes[ind].set_title(titles[ind])
+            axes[ind].set_xticklabels([])
+            axes[ind].set_yticklabels([])
         for diaHist, radHist in itertools.izip(diaHists, radHists):
             holePosErr = [sampleFromHist(nSamples, radHist), sampleRandomAngle(nSamples)]
             # note ferrule always gets pushed to one edge of the hole
@@ -138,29 +156,54 @@ class PlotManager(object):
                 (sampleFromHist(nSamples, diaHist)+nomHoleDia-sampleFerruleOD(nSamples))/2., # nom hole dia needed because diaHist is error not diameter
                 sampleRandomAngle(nSamples)
             ]
-            ferruleConcErr = [sampleFerruleConc(nSamples), sampleRandomAngle(nSamples)]
-            # ferrulePosErr = [[0]*nSamples, sampleRandomAngle(nSamples)]
-            # fiber errors
-            fiberPosErr = [
-                (sampleFerruleID(nSamples)-fiberOD)/2.,
-                sampleRandomAngle(nSamples)
-            ]
-            fiberConcErr = [sampleFiberConc(nSamples), sampleRandomAngle(nSamples)]
-
             # convert all to cartesian and sum errors
             xyErr = numpy.zeros((nSamples, 2))
-            for err in [holePosErr, ferrulePosErr, ferruleConcErr, fiberPosErr, fiberConcErr]:
+            for err in [fiberConcErr, fiberPosErr, ferruleConcErr, ferrulePosErr, holePosErr]:
                 err = numpy.asarray(err).T
                 # convert from r, theta to x, y
                 xyErr += numpy.asarray([err[:,0]*numpy.cos(err[:,1]), err[:,0]*numpy.sin(err[:,1])]).T
+
             # determine final radial error
             fullRadialErr = numpy.linalg.norm(xyErr, axis=1)
-            plt.hist(fullRadialErr, bins=50, alpha=0.5, normed=True)
-        plt.legend(["2005-2008", "2013+"])
-        plt.title(plotName)
+            fullRadialErrors.append(fullRadialErr)
+            titles = ["Ferrule OD-Hole Clearance", "Hole Position Error", "Radial Error Distrubution in Fiber Placement"]
+            for ind, err in enumerate([ferrulePosErr, holePosErr, fullRadialErr]):
+                if len(err)==2:
+                    err = err[0]
+                axes[ind+3].hist(err, bins=bins, alpha=0.5, normed=True)
+                axes[ind+3].set_xlim(xlim)
+                axes[ind+3].set_title(titles[ind])
+                axes[ind+3].set_yticklabels([])
+                axes[ind+3].legend(["2005-2008", "2013+"])
+                if ind+3 != 5:
+                    axes[ind+3].set_xticklabels([])
+
+        # plt.title(plotName)
+        plt.xlabel("Radial Err (mm)")
+        # plt.ylabel("Normalized Counts")
+        plt.savefig(self.figDir+"/"+"individualErrors"+"."+self.figFormat, format=self.figFormat)
+
+        ### next plot cumulative sum
+        f, axes = plt.subplots(2, 1, figsize=(10,10))
+        for err in fullRadialErrors:
+            histout, binedges, foo = axes[0].hist(err, bins=bins, alpha=0.5, normed=True)
+            binwidth = binedges[1]-binedges[0]
+            binCenters = binedges[:-1]+binwidth/2.
+            axes[0].set_xlim(xlim)
+            axes[0].set_ylabel("Normalized Counts")
+            axes[0].legend(["2005-2008", "2013+"])
+            # get percentages
+            cumSum = numpy.cumsum(histout*binwidth)
+            axes[1].plot(binCenters, cumSum)
+            # axes[1].set_xlim(xlim)
+            axes[1].set_ylabel("Cumulative Distribution")
+            axes[1].legend(["2005-2008", "2013+"])
+
+        # plt.xlim(xlim)
+        # plt.title("Cumulative Radial Error in Fiber Placement")
         plt.xlabel("Err (mm)")
-        plt.ylabel("Normalized Counts")
-        plt.savefig(self.figDir+"/"+plotName+"."+self.figFormat, format=self.figFormat)
+        # plt.ylabel("Normalized Counts")
+        plt.savefig(self.figDir+"/totalErrorHist."+self.figFormat, format=self.figFormat)
 
 def makeSubsetPickle():
     plateMeasurements = pickle.load(open("plateMeasurements.p", "rb"))
@@ -222,7 +265,7 @@ if __name__ == "__main__":
     # pm.plot2DHist("diaRMSErr_2DHist", errType="diaErr", rms=True)
     pm.plot2DHist("diaErr_2DHist", errType="diaErr", rms=False)
 
-    pm.fullErrorHist("includingAllErrSources", diaHists, radHists)
+    pm.fullErrorHist(diaHists, radHists)
 
     # pm = PlotManager("plateRMSMeas.p")
     # pm.plotScatter("plateRMSErr", alpha=0.1)
