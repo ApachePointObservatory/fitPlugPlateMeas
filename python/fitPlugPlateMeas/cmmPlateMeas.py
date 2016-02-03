@@ -1,7 +1,6 @@
 import os
 import numpy
 import re
-import datetime
 
 from . import fitData
 
@@ -51,9 +50,7 @@ class PlateMeas(object):
                 except:
                     break
             self.plateID = int(plateIDint)
-        if measDate:
-            measDate = datetime.date(*[int(x) for x in measDate.split("-")])
-        self.measDate = measDate # meas date may be None or a datetime.date obj
+        self.measDate = None if measDate is None else str(measDate) # meas date may be None
         if plateID not in self.fileName:
             raise RuntimeError("File name = %s does not match plate ID = %s" % (self.fileName, self.plateID))
 
@@ -166,14 +163,6 @@ class PlateMeas(object):
             "qpYErr": qpYErr,
             "qpRadErr": qpRadErr,
         }
-
-
-class MeasPlotter(object):
-    def __init__(self, plateMeasList):
-        """inputs:
-        plateMeasList: a list of PlateMeas objects
-        """
-        pass
 
 
 def readHeader(fileLines):
