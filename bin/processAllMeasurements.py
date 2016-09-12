@@ -12,7 +12,7 @@ import pickle
 
 from fitPlugPlateMeas import PlateMeas
 
-measDir = "/nfsmount/shopdc0/meas"
+measDir = "/Users/csayres/Desktop/APOGEE_SOUTH_MEAS"
 assert os.path.exists(measDir)
 plateList = []
 
