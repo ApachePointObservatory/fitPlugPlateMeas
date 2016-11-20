@@ -12,7 +12,7 @@ import pickle
 
 from fitPlugPlateMeas import PlateMeas
 
-measDir = "/Users/csayres/Desktop/APOGEE_SOUTH_MEAS"
+measDir = "/Users/csayres/Desktop/octPlateMeasOff"
 assert os.path.exists(measDir)
 plateList = []
 
@@ -36,4 +36,4 @@ def recursiveDive(plateList, path):
 t1 = time.time()
 recursiveDive(plateList, measDir)
 print("took: ", time.time()-t1)
-pickle.dump( plateList, open( "plateMeasurements.p", "wb" ) )
+pickle.dump( plateList, open( os.path.join(measDir, "plateMeasurements.p"), "wb" ) )
