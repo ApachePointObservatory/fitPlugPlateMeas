@@ -18,7 +18,7 @@ plateList = []
 
 def recursiveDive(plateList, path):
     print("current dir: ", path)
-    dFiles = glob.glob(os.path.join(path, "D*"))
+    dFiles = glob.glob(os.path.join(path, "D905*"))
     for f in dFiles[1:]:
         try:
             plate = PlateMeas(f).export()
