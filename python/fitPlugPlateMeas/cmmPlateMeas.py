@@ -65,6 +65,8 @@ class PlateMeas(object):
         fitPos = fitTransRotScale.getFitPos()
         residPosErr = fitTransRotScale.getPosError()
         residRadErr = fitTransRotScale.getRadError()
+        self.residPosErr = residPosErr
+        self.residRadErr = residRadErr
 
         # Identify manga holes by their larger diameter.
         mangaNomDia = 3.28
@@ -92,7 +94,9 @@ class PlateMeas(object):
         )
         self.quadrupoleMag, self.quadrupoleAng = fitQuadrupole.model.getMagnitudeAngle()
         quadrupoleResidPosErr = fitQuadrupole.getPosError()
+        self.quadrupoleResidPosErr = quadrupoleResidPosErr
         quadrupleResidRadErr = fitQuadrupole.getRadError()
+        self.quadrupleResidRadErr = quadrupleResidRadErr
 
         self.residRadErrRMS_nonManga = fitData.arrayRMS(residRadErr[nonMangaInds])
         self.diaErr_nonManga = self.diaErr[nonMangaInds]
