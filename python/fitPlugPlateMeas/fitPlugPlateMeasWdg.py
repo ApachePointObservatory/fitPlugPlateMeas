@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from __future__ import with_statement
+
 """Fit plug plate measurements
 
 History:
@@ -22,7 +22,7 @@ History:
 """
 import os.path
 #import re
-import Tkinter
+import tkinter
 import numpy
 #import scipy.optimize
 import matplotlib
@@ -36,9 +36,9 @@ from .version import __version__
 
 __all__ = ["FitPlugPlateMeasWdg"]
 
-class GraphWdg(Tkinter.Frame):
+class GraphWdg(tkinter.Frame):
     def __init__(self, master):
-        Tkinter.Frame.__init__(self, master)
+        tkinter.Frame.__init__(self, master)
 
         # dictionary of fileName: posErrArr
         self.dataDict = dict()
@@ -210,7 +210,7 @@ File       Meas Date  Holes  Offset X  Offset Y   Scale     Rotation  Pos Err   
 
             self.logWdg.addMsg("quadrupole fit for %5d plates: %65s %8.2f  %8.2f    %8.4f" % \
                 (self.numSavedPlates, "", quadrupoleMag * 1.0e6, quadrupoleAng, quadrupoleResidRadRMS))
-        except Exception, e:
+        except Exception as e:
             self.logWdg.addMsg("Failed to fit quadrupole for cumulative data: %s" % (RO.StringUtil.strFromException(e,)), severity=RO.Constants.sevError)
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from __future__ import with_statement
+
 """Fit plug plate measurements
 
 History:
@@ -109,7 +109,7 @@ class ModelFit(object):
             initialCoeffs,
             maxfev = maxFuncEval,
         )
-        if status not in range(5):
+        if status not in list(range(5)):
             if doRaise:
                 raise RuntimeError("fit failed")
             else:
@@ -319,7 +319,7 @@ def arrayRMS(arr):
 
 
 if __name__ == "__main__":
-    print "Test TransRotScaleModel"
+    print("Test TransRotScaleModel")
     trsModel = TransRotScaleModel()
     xyPosList = []
     for xPos in (0.0, 1.0): # -1.5, 0.0, 0.5):
@@ -340,7 +340,7 @@ if __name__ == "__main__":
     ):
         outPos = trsModel.applyOne(inPos)
         if not numpy.allclose(outPos, desOutPos):
-            print "Apply failed on coeffs=%s, inPos=%s, desOutPos=%s outPos=%s" % (trsModel.getCoeffs(), inPos, desOutPos, outPos)
+            print("Apply failed on coeffs=%s, inPos=%s, desOutPos=%s outPos=%s" % (trsModel.getCoeffs(), inPos, desOutPos, outPos))
 
     for trans in ((0.0, 0.0), (-0.5, 0.3), (0.0, 0.0), (11.9, -35.4)):
         for rot in (90.0, -180.0, -179.0, -90.0, -45.0, 0.0, 45.0, 180.0):
@@ -349,12 +349,12 @@ if __name__ == "__main__":
                 cnvPosArr = trsModel.apply(xyPosArr)
                 invPosArr = trsModel.apply(cnvPosArr, doInverse=True)
                 if not numpy.allclose(xyPosArr, invPosArr):
-                    print "Round trip failed for trans=%s, rot=%s, scale=%s" % (trans, rot, scale)
-                    print "xyPosArr=", xyPosArr
-                    print "cnvPosArr=", cnvPosArr
-                    print "invPosArr=", invPosArr
+                    print("Round trip failed for trans=%s, rot=%s, scale=%s" % (trans, rot, scale))
+                    print("xyPosArr=", xyPosArr)
+                    print("cnvPosArr=", cnvPosArr)
+                    print("invPosArr=", invPosArr)
 
-    print "Test QuadrupoleModel"
+    print("Test QuadrupoleModel")
     qpModel = QuadrupoleModel()
     xyPosList = []
     for xPos in (0.0, 1.0): # -1.5, 0.0, 0.5):
@@ -370,7 +370,7 @@ if __name__ == "__main__":
             cnvPosArr = qpModel.apply(xyPosArr)
             invPosArr = qpModel.apply(cnvPosArr, doInverse=True)
             if not numpy.allclose(xyPosArr, invPosArr):
-                print "Round trip failed for qpMag=%s, qpAngle=%s" % (qpMag, qpAngle)
-                print "xyPosArr=", xyPosArr
-                print "cnvPosArr=", cnvPosArr
-                print "invPosArr=", invPosArr
+                print("Round trip failed for qpMag=%s, qpAngle=%s" % (qpMag, qpAngle))
+                print("xyPosArr=", xyPosArr)
+                print("cnvPosArr=", cnvPosArr)
+                print("invPosArr=", invPosArr)
